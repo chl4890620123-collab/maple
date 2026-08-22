@@ -49,6 +49,43 @@ http://localhost:18080
 APP_PORT=18081
 ```
 
+## 첫 미니PC 배포: 한 번만 실행
+
+현재 서버에서 SSH 22가 외부 연결을 받지 않는 상태라면 원격 GitHub Actions보다 먼저 서버 자체를 한 번 초기화해야 합니다.
+
+미니PC에서 **PowerShell을 관리자 권한으로 실행**한 뒤 아래를 그대로 실행합니다.
+
+```powershell
+$bootstrap = "$env:TEMP\maple-bootstrap.ps1"
+Invoke-WebRequest "https://raw.githubusercontent.com/chl4890620123-collab/maple/main/deploy/scripts/bootstrap-server.ps1" -OutFile $bootstrap
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bootstrap
+```
+
+스크립트가 자동으로 처리하는 내용:
+
+1. Windows OpenSSH Server 설치/시작, 22번 방화벽 허용
+2. Docker Desktop/Engine 준비 확인
+3. `8000`, `18080`, `18081`, `18082` 중 실제로 비어 있는 첫 포트 선택
+4. 선택된 앱 포트 Windows 방화벽 허용
+5. `C:\home\maple\app`에 이 저장소 clone/update
+6. 서버 전용 `.env.runtime`과 랜덤 `ADMIN_TOKEN` 생성
+7. Docker Compose build/up
+8. `/api/health`가 `ok`가 될 때까지 검증
+9. GitHub CLI가 없으면 설치
+10. GitHub 로그인 1회 후 현재 공인 IP/Windows 계정/22번/비밀번호를 GitHub Actions Secret으로 등록
+11. `DEPLOY_PATH`, `APP_PORT`, `DEFAULT_FEE_RATE`, `ENABLE_DEPLOY=true` Variables 등록
+
+Windows 비밀번호는 저장소 파일에 기록하지 않고 GitHub Actions Secret 입력으로만 사용합니다.
+
+마지막에 화면에 다음 형태로 실제 접속 주소가 출력됩니다.
+
+```text
+Local health: http://127.0.0.1:<선택포트>/api/health
+LAN address : http://<미니PC 내부IP>:<선택포트>
+```
+
+외부 인터넷 접속은 공유기의 포트포워딩에서도 **선택된 앱 포트 → 미니PC 내부 IP 동일 포트**가 연결되어 있어야 합니다.
+
 ## 배포 방식
 
 이 저장소는 기존 도메인을 점유하지 않습니다. 미니PC의 별도 포트에 컨테이너를 노출합니다.
@@ -69,11 +106,11 @@ GitHub Actions Secrets:
 GitHub Repository Variable:
 
 - `DEPLOY_PATH`: 기본값 `C:\home\maple\app`
-- `APP_PORT`: 기존 MOVE AI가 반납한 포트 또는 `18080`
+- `APP_PORT`: 기존 MOVE AI가 반납한 포트 또는 자동 선택 포트
 - `DEFAULT_FEE_RATE`: `0.05`
-- `ENABLE_DEPLOY`: 서버 설정이 끝난 뒤 `true`로 변경
+- `ENABLE_DEPLOY`: 서버 설정이 끝난 뒤 `true`
 
-`ADMIN_TOKEN`은 서버의 `C:\home\maple\app\.env.runtime`에만 보관합니다. 첫 배포 시 파일이 자동 생성되며, 외부 공개 전에 `CHANGE_ME_ON_SERVER`를 긴 임의 문자열로 바꿔야 합니다.
+`ADMIN_TOKEN`은 서버의 `C:\home\maple\app\.env.runtime`에만 보관합니다.
 
 `main` push → CI 성공 → SSH 22번 접속 → 저장소 clone/갱신 → SQLite 백업 → Docker 재빌드/재기동 순서입니다. Windows 미니PC 배포는 `deploy/scripts/deploy.ps1`이 담당합니다.
 
@@ -84,7 +121,7 @@ Docker 내부 포트는 8000으로 고정하고 외부만 변경합니다.
 
 ```text
 기존 서비스: 80 / 443
-Maple Craft: 18080 -> container:8000
+Maple Craft: APP_PORT -> container:8000
 ```
 
 포트가 이미 사용 중이라면 GitHub `Settings > Secrets and variables > Actions > Variables > APP_PORT` 값만 바꾸면 됩니다.
