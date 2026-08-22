@@ -1,0 +1,25 @@
+services:
+  maple-craft:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maple-craft-analytics
+    restart: unless-stopped
+    environment:
+      DB_PATH: ${DB_PATH:-/app/data/maple_craft.db}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN must be set}
+      DEFAULT_FEE_RATE: ${DEFAULT_FEE_RATE:-0.05}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${APP_PORT:-18080}:8000"
+    volumes:
+      - maple_craft_data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  maple_craft_data:
+    name: maple_craft_data

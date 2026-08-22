@@ -1,0 +1,154 @@
+{
+  "source_note": "초기값은 사용자 제공 '장신구 제작.xlsx/PDF' 계산식을 기준으로 전환. 가격은 초기 예시이며 실제 사용 전 웹 경매장 시세로 갱신한다.",
+  "materials": [
+    {"name":"태초의 정수","price":200000},
+    {"name":"혼돈의 파편","price":17248896},
+    {"name":"꿈의 돌","price":10000},
+    {"name":"뒤틀린 시간의 정수","price":5000},
+    {"name":"상급 주문의 정수","price":95000},
+    {"name":"영원히 꺼지지 않는 불꽃","price":95000},
+    {"name":"꺼지지 않는 불꽃","price":110000},
+    {"name":"환생의 조각","price":12000},
+    {"name":"영롱한 황혼의 정수","price":7000000},
+    {"name":"행운의 크리스탈","price":20000},
+    {"name":"지혜의 크리스탈","price":30000},
+    {"name":"최상급 아이템 결정","price":270000},
+    {"name":"상급 아이템 결정","price":5000},
+    {"name":"중급 아이템 결정","price":30000},
+    {"name":"리튬","price":22222},
+    {"name":"시간의 돌","price":10000},
+    {"name":"청동","price":491111},
+    {"name":"아다만티움","price":436968},
+    {"name":"현자의 돌","price":4000},
+    {"name":"엔젤릭블레스 제작 레시피","price":1800000},
+    {"name":"다크엔젤릭블레스 제작 레시피","price":16000000},
+    {"name":"올마이티링 제작 레시피","price":15000000},
+    {"name":"익스트림 벨트 제작 레시피","price":24000000},
+    {"name":"쥬니퍼베리 씨앗 오일","price":5600000},
+    {"name":"중급 주문의 정수","price":3000},
+    {"name":"히솝꽃 오일","price":100000},
+    {"name":"황혼의 정수","price":740000},
+    {"name":"마력결정","price":50}
+  ],
+  "items": [
+    {
+      "name":"영원한 환생의 불꽃","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":2570000,"extra_cost":0,
+      "recipe":[
+        {"material":"영원히 꺼지지 않는 불꽃","quantity":5},
+        {"material":"상급 주문의 정수","quantity":20},
+        {"material":"환생의 조각","quantity":10},
+        {"material":"마력결정","quantity":40}
+      ]
+    },
+    {
+      "name":"강력한 환생의 불꽃","profession":"장신구 제작","required_rank":"장인/명장","output_quantity":1,"sale_price":930000,"extra_cost":0,
+      "recipe":[
+        {"material":"꺼지지 않는 불꽃","quantity":5},
+        {"material":"환생의 조각","quantity":5},
+        {"material":"중급 주문의 정수","quantity":30},
+        {"material":"마력결정","quantity":20}
+      ]
+    },
+    {
+      "name":"마이스터링","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":25000000,"extra_cost":2400000,
+      "recipe":[
+        {"material":"태초의 정수","quantity":1},
+        {"material":"뒤틀린 시간의 정수","quantity":800},
+        {"material":"상급 주문의 정수","quantity":150},
+        {"material":"현자의 돌","quantity":35}
+      ],
+      "source_note":"원본 Excel의 +2,400,000 고정비를 extra_cost로 보존"
+    },
+    {
+      "name":"마이스터숄더","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":20000000,"extra_cost":2500000,
+      "recipe":[
+        {"material":"꿈의 돌","quantity":50},
+        {"material":"뒤틀린 시간의 정수","quantity":700},
+        {"material":"상급 주문의 정수","quantity":100},
+        {"material":"현자의 돌","quantity":35}
+      ],
+      "source_note":"원본 Excel의 +2,500,000 고정비를 extra_cost로 보존"
+    },
+    {
+      "name":"마이스터이어링","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":200000000,"extra_cost":2500000,
+      "recipe":[
+        {"material":"혼돈의 파편","quantity":10},
+        {"material":"뒤틀린 시간의 정수","quantity":600},
+        {"material":"상급 주문의 정수","quantity":150},
+        {"material":"현자의 돌","quantity":35}
+      ],
+      "source_note":"원본 Excel의 +2,500,000 고정비를 extra_cost로 보존"
+    },
+    {
+      "name":"마이스터올마이ۋ�링","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":29999999,"extra_cost":600000,
+      "recipe":[
+        {"material":"올마이티링 제작 레시피","quantity":1},
+        {"material":"지혜의 크리스탈","quantity":4},
+        {"material":"행운의 크리스탈","quantity":4},
+        {"material":"리튬","quantity":4},
+        {"material":"영롱한 황혼의 정수","quantity":2},
+        {"material":"최상급 아이템 결정","quantity":8}
+      ]
+    },
+    {
+      "name":"타임리스 이어링","profession":"장신구 제작","required_rank":"10레벨 이상","output_quantity":1,"sale_price":200000,"extra_cost":10000,
+      "recipe":[
+        {"material":"행운의 크리스탈","quantity":3},
+        {"material":"시간의 돌","quantity":1},
+        {"material":"최상급 아이템 결정","quantity":8}
+      ]
+    },
+    {
+      "name":"마법의 숫돌","profession":"장비 제작","required_rank":"장인/명장","output_quantity":1,"sale_price":4070000,"extra_cost":0,
+      "recipe":[
+        {"material":"뒤틀린 시간의 정수","quantity":10},
+        {"material":"상급 주문의 정수","quantity":10},
+        {"material":"최상급 아이템 결정","quantity":10}
+      ]
+    },
+    {
+      "name":"다크 엔젤릭 블레스","profession":"장신구 제작","required_rank":"레시피 필요","output_quantity":1,"sale_price":100000,"extra_cost":500000,
+      "recipe":[
+        {"material":"지혜의 크리스탈","quantity":20},
+        {"material":"행운의 크리스탈","quantity":20},
+        {"material":"리튬","quantity":20},
+        {"material":"최상급 아이템 결정","quantity":10},
+        {"material":"다크엔젤릭블레스 제작 레시피","quantity":1}
+      ]
+    },
+    {
+      "name":"소형 경험 축적의 비약","profession":"연금술","required_rank":"명장","output_quantity":6,"sale_price":448222,"extra_cost":0,
+      "recipe":[
+        {"material":"쥬니퍼베리 씨앗 오일","quantity":5},
+        {"material":"현자의 돌","quantity":1},
+        {"material":"최상급 아이템 결정","quantity":2}
+      ],
+      "source_note":"원본 Excel의 '소형 경축비', 판매가 448,222 x 6을 단가/결과수량으로 정규화"
+    },
+    {
+      "name":"재물 획득의 비약","profession":"연금술","required_rank":"명장","output_quantity":6,"sale_price":3565900,"extra_cost":0,
+      "recipe":[
+        {"material":"쥬니퍼베리 씨앗 오일","quantity":10},
+        {"material":"현자의 돌","quantity":1},
+        {"material":"최상급 아이템 결정","quantity":3}
+      ]
+    },
+    {
+      "name":"경험 축적의 비약","profession":"연금술","required_rank":"명장","output_quantity":3,"sale_price":9000000,"extra_cost":0,
+      "recipe":[
+        {"material":"쥬니퍼베리 씨앗 오일","quantity":10},
+        {"material":"현자의 돌","quantity":2},
+        {"material":"최상급 아이템 결정","quantity":5}
+      ]
+    },
+    {
+      "name":"고급 보스 킬러의 비약","profession":"연금술","required_rank":"명장","output_quantity":2,"sale_price":2200000,"extra_cost":0,
+      "recipe":[
+        {"material":"히솝꽃 오일","quantity":10},
+        {"material":"뒤틀린 시간의 정수","quantity":15},
+        {"material":"황혼의 정수","quantity":3}
+      ],
+      "source_note":"원본 Excel의 '고급 보스 비약', 판매가 2,200,000 x 2를 정규화"
+    }
+  ]
+}

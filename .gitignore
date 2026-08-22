@@ -1,0 +1,8 @@
+.env
+.env.runtime
+__pycache__/
+*.py[cod]
+.venv/
+data/*.db
+data/backups/
+.DS_Store

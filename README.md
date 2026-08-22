@@ -71,6 +71,7 @@ GitHub Repository Variable:
 - `DEPLOY_PATH`: 기본값 `C:\home\maple\app`
 - `APP_PORT`: 기존 MOVE AI가 반납한 포트 또는 `18080`
 - `DEFAULT_FEE_RATE`: `0.05`
+- `ENABLE_DEPLOY`: 서버 설정이 끝난 뒤 `true`로 변경
 
 `ADMIN_TOKEN`은 서버의 `C:\home\maple\app\.env.runtime`에만 보관합니다. 첫 배포 시 파일이 자동 생성되며, 외부 공개 전에 `CHANGE_ME_ON_SERVER`를 긴 임의 문자열로 바꿔야 합니다.
 
