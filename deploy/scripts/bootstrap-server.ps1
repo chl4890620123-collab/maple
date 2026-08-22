@@ -31,21 +31,22 @@ function Ensure-OpenSshServer {
     }
 }
 
+function Test-DockerReady {
+    $docker = Get-Command docker -ErrorAction SilentlyContinue
+    if (-not $docker) { return $false }
+    & docker info *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Ensure-Docker {
-    try {
-        docker info | Out-Null
-        return
-    } catch {}
+    if (Test-DockerReady) { return }
 
     $dockerDesktop = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
     if (Test-Path $dockerDesktop) {
         Start-Process $dockerDesktop
         for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Seconds 2
-            try {
-                docker info | Out-Null
-                return
-            } catch {}
+            if (Test-DockerReady) { return }
         }
     }
     throw 'Docker Engine is not ready. Start Docker Desktop and run this script again.'
@@ -72,7 +73,9 @@ function Sync-Repository {
     if (Test-Path $gitDir) {
         Set-Location $DeployPath
         git fetch origin main
+        if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
         git reset --hard origin/main
+        if ($LASTEXITCODE -ne 0) { throw 'git reset failed' }
         return
     }
 
@@ -86,6 +89,7 @@ function Sync-Repository {
     }
 
     git clone "https://github.com/$Repo.git" $DeployPath
+    if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
     Set-Location $DeployPath
 }
 
