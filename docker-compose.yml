@@ -13,13 +13,9 @@ services:
     ports:
       - "${BIND_HOST:-0.0.0.0}:${APP_PORT:-18080}:8000"
     volumes:
-      - maple_craft_data:/app/data
+      - "${MAPLE_DATA_DIR:-./data}:/app/data"
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  maple_craft_data:
-    name: maple_craft_data
