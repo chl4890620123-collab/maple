@@ -3,6 +3,9 @@ services:
     image: mariadb:11.4
     container_name: maple-local-db
     restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     environment:
       MARIADB_DATABASE: ${DB_NAME:-maple_craft}
       MARIADB_USER: ${DB_USER:-maple_app}
@@ -41,7 +44,7 @@ services:
       DEFAULT_FEE_RATE: ${DEFAULT_FEE_RATE:-0.05}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
     ports:
-      - "${BIND_HOST:-0.0.0.0}:${APP_PORT:-18080}:8000"
+      - "${BIND_HOST:-127.0.0.1}:${APP_PORT:-18080}:8000"
     logging:
       driver: json-file
       options:

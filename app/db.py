@@ -284,29 +284,79 @@ def _init_mariadb(conn) -> None:
         conn.execute(statement)
 
 
+_CP1252_REVERSE = {}
+for _byte in range(256):
+    try:
+        _CP1252_REVERSE[bytes([_byte]).decode("cp1252")] = _byte
+    except UnicodeDecodeError:
+        pass
+
+_MOJIBAKE_HINTS = ("\ufffd", "\u00c3", "\u00c2", "\u00ec", "\u00eb", "\u00ea", "\u00ed", "\u00db")
+
+
+def repair_mojibake(value):
+    if not isinstance(value, str) or not value:
+        return value
+    if not any(marker in value for marker in _MOJIBAKE_HINTS):
+        return value
+
+    normalized = value.replace("\u00db\u2039", "\u00ed\u2039")
+    raw = bytearray()
+    for char in normalized:
+        if char in _CP1252_REVERSE:
+            raw.append(_CP1252_REVERSE[char])
+        elif ord(char) <= 255:
+            raw.append(ord(char))
+        else:
+            return value
+
+    try:
+        repaired = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return value
+    return repaired
+
+
+def _repair_table_text(conn, table: str, columns: tuple[str, ...]) -> None:
+    selected = ", ".join(("id", *columns))
+    rows = conn.execute(f"SELECT {selected} FROM {table}").fetchall()
+    for row in rows:
+        updates = {}
+        for column in columns:
+            repaired = repair_mojibake(row[column])
+            if repaired != row[column]:
+                updates[column] = repaired
+
+        if "name" in updates:
+            existing = conn.execute(
+                f"SELECT id FROM {table} WHERE name = ?",
+                (updates["name"],),
+            ).fetchone()
+            if existing is not None and existing["id"] != row["id"]:
+                updates.pop("name")
+
+        if not updates:
+            continue
+
+        updates["updated_at"] = now_iso()
+        set_clause = ", ".join(f"{column} = ?" for column in updates)
+        params = tuple(updates.values()) + (row["id"],)
+        conn.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", params)
+
+
+def migrate_legacy_text(conn) -> None:
+    _repair_table_text(conn, "materials", ("name", "source_note"))
+    _repair_table_text(conn, "items", ("name", "profession", "required_rank", "source_note"))
+
+
 def init_db() -> None:
     with connection() as conn:
         if config.DB_ENGINE == "mariadb":
             _init_mariadb(conn)
         else:
             _init_sqlite(conn)
+        migrate_legacy_text(conn)
         seed_if_empty(conn)
-
-
-def _load_seed(seed_path: Path) -> dict:
-    """Load the legacy seed while preserving its JSON structure.
-
-    The original seed contains a small number of damaged non-ASCII bytes.
-    JSON structure, numeric values, and ASCII keys remain intact, so strict
-    UTF-8 is preferred and only damaged characters inside string values are
-    replaced when strict decoding is impossible.
-    """
-    raw = seed_path.read_bytes()
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        text = raw.decode("utf-8", errors="replace")
-    return json.loads(text)
 
 
 def seed_if_empty(conn) -> None:
@@ -318,7 +368,7 @@ def seed_if_empty(conn) -> None:
     if not seed_path.exists():
         return
 
-    seed = _load_seed(seed_path)
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
     ts = now_iso()
 
     for material in seed.get("materials", []):

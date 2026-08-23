@@ -16,6 +16,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate UTF-8, JSON and tracked artifacts
+        run: |
+          python scripts/check_text_integrity.py
+          ignored="$(git ls-files -ci --exclude-standard)"
+          if [ -n "$ignored" ]; then
+            echo "Tracked files are ignored by .gitignore:"
+            echo "$ignored"
+            exit 1
+          fi
+          node --check app/static/app.js
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -24,6 +37,12 @@ jobs:
         env:
           DB_ENGINE: sqlite
         run: PYTHONPATH=. pytest -q
+      - name: Validate Compose
+        env:
+          DB_PASSWORD: ci_maple_password
+          DB_ROOT_PASSWORD: ci_maple_root_password
+          ADMIN_TOKEN: ci_admin_token
+        run: docker compose config >/dev/null
       - name: Docker build
         run: docker build --platform linux/amd64 -t maple-craft-analytics:ci .
 

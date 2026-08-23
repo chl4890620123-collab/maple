@@ -80,7 +80,7 @@
       "source_note":"원본 Excel의 +2,500,000 고정비를 extra_cost로 보존"
     },
     {
-      "name":"마이스터올마이ۋ�링","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":29999999,"extra_cost":600000,
+      "name":"마이스터올마이티링","profession":"장신구 제작","required_rank":"명장","output_quantity":1,"sale_price":29999999,"extra_cost":600000,
       "recipe":[
         {"material":"올마이티링 제작 레시피","quantity":1},
         {"material":"지혜의 크리스탈","quantity":4},
