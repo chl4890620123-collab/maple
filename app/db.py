@@ -293,6 +293,16 @@ def init_db() -> None:
         seed_if_empty(conn)
 
 
+def _load_seed(seed_path: Path) -> dict:
+    """Read seed data while preserving compatibility with legacy Windows files."""
+    raw = seed_path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("cp949")
+    return json.loads(text)
+
+
 def seed_if_empty(conn) -> None:
     count = conn.execute("SELECT COUNT(*) FROM materials").fetchone()[0]
     if count:
@@ -302,7 +312,7 @@ def seed_if_empty(conn) -> None:
     if not seed_path.exists():
         return
 
-    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    seed = _load_seed(seed_path)
     ts = now_iso()
 
     for material in seed.get("materials", []):
