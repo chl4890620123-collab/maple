@@ -86,7 +86,7 @@ GitHub Actions
   -> Self-hosted Windows Runner
   -> Docker Compose
   -> 임시 Nginx 프론트
-  -> /health = ok
+  -> / 화면 HTTP 200 확인
 ```
 
 이 테스트가 성공하면 `Server`의 임시 프론트를 삭제하고 다음 단계에서 Maple 저장소를 연결합니다.
