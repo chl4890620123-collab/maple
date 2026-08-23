@@ -3,97 +3,143 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0e1118" />
   <title>Maple Craft Analytics</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">MAPLE CRAFT ANALYTICS</p>
-        <h1>전문기술 제작 수익 계산기</h1>
-        <p class="sub">가격만 입력하고, 제작비·수수료·예상 수익·판매 기록은 자동으로 쌓습니다.</p>
-      </div>
-      <div class="auth-box">
-        <label>관리 토큰</label>
-        <div class="inline">
-          <input id="adminToken" type="password" placeholder="배포용 ADMIN_TOKEN" />
-          <button id="saveToken" class="secondary">저장</button>
+      <div class="brand-block">
+        <div class="brand-row">
+          <span class="brand-mark">M</span>
+          <div>
+            <p class="eyebrow">MAPLE CRAFT ANALYTICS</p>
+            <h1>제작 수익 보드</h1>
+          </div>
+        </div>
+        <p class="sub">가격을 갱신하고, 수익이 남는 제작품만 빠르게 고르세요.</p>
+        <div class="status-line">
+          <span id="healthBadge" class="status-badge loading">서버 확인 중</span>
+          <span class="status-copy">가격 → 수익 비교 → 제작·판매 기록</span>
         </div>
       </div>
+
+      <details id="adminSettings" class="admin-settings">
+        <summary>관리 설정</summary>
+        <div class="admin-settings-body">
+          <label for="adminToken">관리 토큰</label>
+          <p>가격 수정과 제작·판매 기록 저장 시에만 필요합니다.</p>
+          <div class="inline">
+            <input id="adminToken" type="password" autocomplete="off" placeholder="ADMIN_TOKEN" />
+            <button id="saveToken" class="secondary" type="button">저장</button>
+          </div>
+        </div>
+      </details>
     </header>
 
-    <nav class="tabs">
-      <button data-tab="calc" class="active">전체 계산</button>
-      <button data-tab="prices">가격 입력</button>
-      <button data-tab="records">제작·판매 기록</button>
+    <nav class="tabs" aria-label="주요 메뉴">
+      <button data-tab="calc" class="active" type="button"><span>1</span> 수익 계산</button>
+      <button data-tab="prices" type="button"><span>2</span> 가격 관리</button>
+      <button data-tab="records" type="button"><span>3</span> 기록</button>
     </nav>
 
     <main>
       <section id="calc" class="tab-panel active">
-        <div class="toolbar card">
-          <div>
-            <label>판매 수수료</label>
-            <select id="feeRate">
-              <option value="0.05">5% · MVP/PC방 미적용</option>
-              <option value="0.03">3% · 적용</option>
-            </select>
+        <div class="filter-card card">
+          <div class="filter-grid">
+            <div>
+              <label for="feeRate">판매 수수료</label>
+              <select id="feeRate">
+                <option value="0.05">5%</option>
+                <option value="0.03">3%</option>
+              </select>
+            </div>
+            <div>
+              <label for="professionFilter">전문기술</label>
+              <select id="professionFilter">
+                <option value="">전체</option>
+                <option>장비 제작</option>
+                <option>장신구 제작</option>
+                <option>연금술</option>
+              </select>
+            </div>
+            <div class="search-field">
+              <label for="itemSearch">제작품 검색</label>
+              <input id="itemSearch" placeholder="제작품 이름 검색" autocomplete="off" />
+            </div>
+            <label class="toggle-field">
+              <input id="profitableOnly" type="checkbox" />
+              <span>수익 제품만</span>
+            </label>
+            <button id="refresh" class="secondary refresh-button" type="button">새로고침</button>
           </div>
-          <div>
-            <label>전문기술</label>
-            <select id="professionFilter">
-              <option value="">전체</option>
-              <option>장비 제작</option>
-              <option>장신구 제작</option>
-              <option>연금술</option>
-            </select>
-          </div>
-          <div class="grow">
-            <label>검색</label>
-            <input id="itemSearch" placeholder="마이스터, 비약..." />
-          </div>
-          <button id="refresh">다시 계산</button>
         </div>
 
         <div id="summaryCards" class="summary-grid"></div>
-        <div class="card table-card">
-          <div class="table-head">
+
+        <section class="result-section">
+          <div class="section-heading">
             <div>
-              <h2>제작 우선순위</h2>
-              <p>예상 순이익 높은 순. 실제 제작 여부는 경매장 상황을 보고 최종 판단하세요.</p>
+              <p class="section-kicker">추천 순서</p>
+              <h2>지금 제작할 후보</h2>
+              <p>예상 순이익이 높은 순으로 보여줍니다.</p>
             </div>
+            <span id="resultCount" class="count-badge">0개</span>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>#</th><th>제작품</th><th>분류</th><th>제작단가</th><th>판매가</th><th>수수료</th><th>예상수익</th><th>마진</th><th></th></tr></thead>
-              <tbody id="calcRows"></tbody>
-            </table>
-          </div>
-        </div>
+          <div id="calcRows" class="profit-list"></div>
+        </section>
       </section>
 
       <section id="prices" class="tab-panel">
-        <div class="grid-2">
-          <div class="card">
-            <div class="section-title"><div><h2>재료 가격</h2><p>저장할 때마다 가격 이력이 남습니다.</p></div></div>
-            <div id="materialList" class="edit-list"></div>
+        <div class="section-heading price-heading">
+          <div>
+            <p class="section-kicker">시세 업데이트</p>
+            <h2>가격 관리</h2>
+            <p>한 번에 한 종류만 보여줘서 입력 부담을 줄였습니다.</p>
           </div>
-          <div class="card">
-            <div class="section-title"><div><h2>완제품 판매가</h2><p>경매장에서 확인한 개당 판매가를 입력하세요.</p></div></div>
-            <div id="itemPriceList" class="edit-list"></div>
+          <div class="price-tools">
+            <input id="priceSearch" placeholder="재료·제작품 검색" autocomplete="off" />
+            <div class="segmented" role="group" aria-label="가격 종류">
+              <button type="button" data-price-view="materials" class="active">재료</button>
+              <button type="button" data-price-view="items">완제품</button>
+            </div>
           </div>
+        </div>
+
+        <div id="materialPricePanel" class="card price-panel active">
+          <div class="panel-title">
+            <div><h3>재료 가격</h3><p>Enter를 눌러도 저장됩니다.</p></div>
+            <span id="materialCount" class="count-badge"></span>
+          </div>
+          <div id="materialList" class="edit-list"></div>
+        </div>
+
+        <div id="itemPricePanel" class="card price-panel">
+          <div class="panel-title">
+            <div><h3>완제품 판매가</h3><p>경매장 개당 판매가를 입력하세요.</p></div>
+            <span id="itemPriceCount" class="count-badge"></span>
+          </div>
+          <div id="itemPriceList" class="edit-list"></div>
         </div>
       </section>
 
       <section id="records" class="tab-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">최근 30일</p>
+            <h2>제작·판매 흐름</h2>
+            <p>최근 활동만 간단하게 확인합니다.</p>
+          </div>
+        </div>
         <div id="dashCards" class="summary-grid"></div>
-        <div class="grid-2">
-          <div class="card">
-            <h2>최근 제작</h2>
+        <div class="records-grid">
+          <div class="card record-column">
+            <div class="panel-title"><div><h3>최근 제작</h3><p>판매가 남은 제작건을 바로 처리할 수 있습니다.</p></div></div>
             <div id="craftList" class="record-list"></div>
           </div>
-          <div class="card">
-            <h2>최근 판매</h2>
+          <div class="card record-column">
+            <div class="panel-title"><div><h3>최근 판매</h3><p>실제 수익 중심으로 보여줍니다.</p></div></div>
             <div id="saleList" class="record-list"></div>
           </div>
         </div>
@@ -103,8 +149,25 @@
 
   <dialog id="recipeDialog">
     <form method="dialog" class="dialog-card">
-      <button class="dialog-close" value="cancel">×</button>
+      <button class="dialog-close" value="cancel" aria-label="닫기">×</button>
       <div id="recipeDialogBody"></div>
+    </form>
+  </dialog>
+
+  <dialog id="actionDialog">
+    <form id="actionForm" class="dialog-card action-dialog-card">
+      <button id="actionClose" class="dialog-close" type="button" aria-label="닫기">×</button>
+      <p id="actionKicker" class="section-kicker"></p>
+      <h2 id="actionTitle"></h2>
+      <p id="actionDescription" class="muted"></p>
+      <div class="dialog-fields">
+        <label>수량<input id="actionQuantity" type="number" min="0.01" step="0.01" inputmode="decimal" required /></label>
+        <label id="actionPriceField">실제 개당 판매가<input id="actionPrice" inputmode="numeric" autocomplete="off" /></label>
+      </div>
+      <div class="dialog-actions">
+        <button id="actionCancel" class="secondary" type="button">취소</button>
+        <button id="actionSubmit" type="submit">저장</button>
+      </div>
     </form>
   </dialog>
 
