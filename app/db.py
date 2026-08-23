@@ -294,12 +294,18 @@ def init_db() -> None:
 
 
 def _load_seed(seed_path: Path) -> dict:
-    """Read seed data while preserving compatibility with legacy Windows files."""
+    """Load the legacy seed while preserving its JSON structure.
+
+    The original seed contains a small number of damaged non-ASCII bytes.
+    JSON structure, numeric values, and ASCII keys remain intact, so strict
+    UTF-8 is preferred and only damaged characters inside string values are
+    replaced when strict decoding is impossible.
+    """
     raw = seed_path.read_bytes()
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        text = raw.decode("cp949")
+        text = raw.decode("utf-8", errors="replace")
     return json.loads(text)
 
 
