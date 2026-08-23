@@ -5,11 +5,11 @@
 ## 현재 구조
 
 - FastAPI + 기존 HTML/JS 화면 유지
-- 운영 DB: MariaDB
-- SQLite: 가벼운 로컬 회귀 테스트/비상 fallback 용도만 유지
-- 운영 배포: `chl4890620123-collab/Server` 저장소가 중앙 관리
-- Maple 저장소는 앱 코드, Dockerfile, 로컬 개발용 Compose, CI만 담당
-- 미니PC SSH / 운영 Compose / Caddy / 운영 runtime env는 Server 저장소와 서버가 담당
+- 운영 DB 후보: MariaDB
+- SQLite: 가벼운 로컬 회귀 테스트 / fallback 용도
+- Maple 저장소는 **앱 코드, Dockerfile, 로컬 개발용 Compose, CI만 담당**
+- 미니PC 배포와 공용 인프라는 `chl4890620123-collab/Server` 저장소가 담당할 예정
+- 현재는 `Server`의 Self-hosted Runner smoke test가 먼저이며, Maple은 아직 운영 인프라에 연결하지 않음
 
 ## 주요 기능
 
@@ -65,11 +65,7 @@ DB_ROOT_PASSWORD
 DB_PATH
 ```
 
-운영 환경에서는 이 저장소의 `.env`를 사용하지 않습니다. 운영 값은 미니PC의 Server 관리 경로에 보관합니다.
-
-```text
-D:\server-data\maple\runtime\.env
-```
+운영 runtime env와 백업 정책은 앱 저장소가 아니라 `Server` 인프라에서 관리합니다.
 
 ## CI
 
@@ -81,21 +77,31 @@ D:\server-data\maple\runtime\.env
 
 Maple 저장소는 미니PC에 직접 SSH 배포하지 않습니다.
 
-## 운영 배포
+## 운영 배포 상태
 
-운영 배포는 `chl4890620123-collab/Server` 저장소가 담당합니다.
+**현재는 연결 전입니다.** 먼저 `Server` 저장소에서 아래 smoke test가 성공해야 합니다.
+
+```text
+GitHub Actions
+  -> Self-hosted Windows Runner
+  -> Docker Compose
+  -> 임시 Nginx 프론트
+  -> /health = ok
+```
+
+이 테스트가 성공하면 `Server`의 임시 프론트를 삭제하고 다음 단계에서 Maple 저장소를 연결합니다.
+
+예정 구조:
 
 ```text
 Maple main
-   -> Server 중앙 배포 workflow가 최신 Maple 소스 확인
-   -> Maple Docker image build / GHCR push
-   -> Server의 기존 SSH Secret으로 미니PC 접속
-   -> Server의 Maple production Compose 실행
-   -> maple-app + maple-db 기동
-   -> /api/health 검증
+   -> CI 성공
+   -> Server 중앙 인프라
+   -> 미니PC Docker
+   -> Maple container
 ```
 
-따라서 Maple 저장소에는 `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`, `SERVER_PASSWORD`, `SERVER_PORT` 같은 운영 서버 Secret을 중복 등록할 필요가 없습니다.
+SSH Secret, Caddy, GHCR, DB 운영 설정은 smoke test 단계에서는 사용하지 않습니다.
 
 ## API
 
@@ -114,10 +120,4 @@ Maple main
 
 ## 데이터 보존
 
-운영 MariaDB 데이터는 프로젝트 컨테이너와 분리해서 미니PC D 드라이브에 보관합니다.
-
-```text
-D:\server-data\maple\mariadb
-```
-
-컨테이너를 교체해도 이 디렉터리는 삭제하지 않습니다.
+운영 데이터 보존과 백업은 `Server` 인프라 연결 이후 중앙 정책으로 관리합니다. 앱 저장소에서는 운영 서버 백업 스크립트를 직접 관리하지 않습니다.
