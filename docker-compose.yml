@@ -1,21 +1,53 @@
 services:
+  maple-db:
+    image: mariadb:11.4
+    container_name: maple-local-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-maple_craft}
+      MARIADB_USER: ${DB_USER:-maple_app}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
+    volumes:
+      - maple_local_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   maple-craft:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: maple-craft-analytics
     restart: unless-stopped
+    depends_on:
+      maple-db:
+        condition: service_healthy
     environment:
-      DB_PATH: ${DB_PATH:-/app/data/maple_craft.db}
+      DB_ENGINE: mariadb
+      DB_HOST: maple-db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-maple_craft}
+      DB_USER: ${DB_USER:-maple_app}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN must be set}
       DEFAULT_FEE_RATE: ${DEFAULT_FEE_RATE:-0.05}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
     ports:
       - "${BIND_HOST:-0.0.0.0}:${APP_PORT:-18080}:8000"
-    volumes:
-      - "${MAPLE_DATA_DIR:-./data}:/app/data"
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  maple_local_db_data:
+    name: maple_local_db_data
