@@ -1,4 +1,9 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+AuctionFeeRate = Literal[0.05, 0.03]
 
 
 class PriceUpdate(BaseModel):
@@ -17,7 +22,7 @@ class MarketPriceBulkUpdate(BaseModel):
 class CraftCreate(BaseModel):
     item_id: int
     quantity: float = Field(gt=0)
-    fee_rate: float = Field(ge=0, le=0.2)
+    fee_rate: AuctionFeeRate = 0.05
     note: str | None = None
 
 
@@ -26,5 +31,5 @@ class SaleCreate(BaseModel):
     item_id: int
     quantity: float = Field(gt=0)
     unit_sale_price: float = Field(ge=0)
-    fee_rate: float = Field(ge=0, le=0.2)
+    fee_rate: AuctionFeeRate = 0.05
     note: str | None = None

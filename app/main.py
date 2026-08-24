@@ -9,7 +9,7 @@ from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
 from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, SaleCreate
 
-app = FastAPI(title="Maple Craft Analytics", version="0.3.0")
+app = FastAPI(title="Maple Craft Analytics", version="0.3.1")
 
 if CORS_ORIGINS:
     app.add_middleware(
@@ -119,8 +119,11 @@ def patch_item_sale_price(item_id: int, body: PriceUpdate):
 
 
 @app.get("/api/calculations")
-def get_calculations(fee_rate: float = Query(default=DEFAULT_FEE_RATE, ge=0, le=0.2)):
-    return service.calculations(fee_rate)
+def get_calculations(fee_rate: float = Query(default=DEFAULT_FEE_RATE)):
+    try:
+        return service.calculations(fee_rate)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/crafts", dependencies=[Depends(require_admin)])

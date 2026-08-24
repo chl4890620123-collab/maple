@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+from . import game_rules
 from .db import connection, now_iso
 
 
@@ -44,6 +45,7 @@ def update_item_sale_price(item_id: int, price: int):
 
 
 def calculations(fee_rate: float):
+    fee_rate = game_rules.validate_auction_fee_rate(fee_rate)
     with connection() as conn:
         items = [dict(r) for r in conn.execute(
             """SELECT id, name, profession, required_rank, output_quantity, current_sale_price,
@@ -93,6 +95,7 @@ def calculations(fee_rate: float):
 
 
 def record_craft(item_id: int, quantity: float, fee_rate: float, note: str | None):
+    fee_rate = game_rules.validate_auction_fee_rate(fee_rate)
     calc = next((x for x in calculations(fee_rate) if x["id"] == item_id), None)
     if calc is None:
         return None
@@ -123,6 +126,7 @@ def record_craft(item_id: int, quantity: float, fee_rate: float, note: str | Non
 
 
 def record_sale(craft_id: int | None, item_id: int, quantity: float, unit_sale_price: float, fee_rate: float, note: str | None):
+    fee_rate = game_rules.validate_auction_fee_rate(fee_rate)
     with connection() as conn:
         item = conn.execute("SELECT id FROM items WHERE id=?", (item_id,)).fetchone()
         if not item:

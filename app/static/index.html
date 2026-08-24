@@ -56,8 +56,8 @@
             <div>
               <label for="feeRate">판매 수수료</label>
               <select id="feeRate">
-                <option value="0.05">5%</option>
-                <option value="0.03">3%</option>
+                <option value="0.05">일반 정산 5%</option>
+                <option value="0.03">PC방 정산 3%</option>
               </select>
             </div>
             <div class="search-field">
@@ -70,6 +70,7 @@
             </label>
             <button id="refresh" class="secondary refresh-button" type="button">다시 계산</button>
           </div>
+          <div id="fixedRuleSummary" class="rule-strip">고정 규칙을 확인 중입니다.</div>
         </div>
 
         <div id="summaryCards" class="summary-grid summary-grid-four"></div>
@@ -90,9 +91,9 @@
       <section id="prices" class="tab-panel">
         <div class="section-heading price-heading">
           <div>
-            <p class="section-kicker">한 아이템 = 한 시세</p>
+            <p class="section-kicker">고정값과 시세를 분리</p>
             <h2>통합 시세 관리</h2>
-            <p>재료이면서 결과물인 아이템도 한 번만 입력합니다.</p>
+            <p>상점 고정가는 잠그고, 경매장 재료·완제품 시세만 수정합니다.</p>
           </div>
         </div>
 
@@ -106,6 +107,14 @@
           <div class="price-help">값을 여러 개 수정한 뒤 아래 저장 버튼을 한 번만 누르세요.</div>
         </div>
 
+        <details class="card fixed-shop-card">
+          <summary>
+            <span><strong>마이스터빌 상점 고정가</strong><small>길드 장사꾼 4% 자동 적용 · 수정 불가</small></span>
+            <span id="fixedShopCount" class="count-badge"></span>
+          </summary>
+          <div id="fixedShopList" class="fixed-shop-list"></div>
+        </details>
+
         <div id="priceSaveBar" class="save-bar">
           <div>
             <strong id="dirtyCount">저장할 변경 없음</strong>
@@ -116,7 +125,7 @@
 
         <div class="card unified-price-panel">
           <div class="panel-title">
-            <div><h3>아이템 시세</h3><p>0원도 직접 입력한 값이면 유효한 시세로 취급합니다.</p></div>
+            <div><h3>변동 시세</h3><p>재료이면서 결과물인 아이템도 한 번만 입력합니다.</p></div>
             <span id="marketPriceCount" class="count-badge"></span>
           </div>
           <div id="marketPriceList" class="edit-list"></div>

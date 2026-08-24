@@ -1,6 +1,8 @@
 const state = {
   categories: [],
   meta: null,
+  gameRules: null,
+  fixedShopPrices: [],
   calculations: [],
   marketPrices: [],
   feeRate: 0.05,
@@ -106,7 +108,10 @@ async function setPriceCategory(key) {
 
 async function loadCalculations() {
   state.feeRate = Number($("#feeRate").value);
-  const params = new URLSearchParams({ fee_rate: String(state.feeRate) });
+  const params = new URLSearchParams({
+    fee_rate: String(state.feeRate),
+    guild_discount: "true",
+  });
   if (state.categoryKey) params.set("category_key", state.categoryKey);
   state.calculations = await api(`/api/meister/calculations?${params}`);
   renderCalculations();
@@ -127,6 +132,7 @@ function renderCalculations() {
   const complete = rows.filter((row) => row.price_complete);
   const profitable = complete.filter((row) => row.expected_profit > 0);
   const top = profitable[0] || complete[0];
+  const guildRate = Math.round(Number(state.gameRules?.guild_shop_discount_rate || 0.04) * 100);
 
   $("#resultTitle").textContent = `${categoryName(state.categoryKey)} 제작 수익 순위`;
   $("#resultCount").textContent = `${rows.length}개`;
@@ -138,7 +144,7 @@ function renderCalculations() {
     </div>
     <div class="metric"><div class="label">계산 가능한 제작법</div><div class="value">${complete.length}개</div><div class="hint">필요 시세가 모두 입력됨</div></div>
     <div class="metric"><div class="label">이득인 제작</div><div class="value positive">${profitable.length}개</div><div class="hint">수수료 반영 후 0 초과</div></div>
-    <div class="metric"><div class="label">현재 카테고리</div><div class="value small-value">${esc(categoryName(state.categoryKey))}</div><div class="hint">수수료 ${Math.round(state.feeRate * 100)}%</div></div>`;
+    <div class="metric"><div class="label">현재 규칙</div><div class="value small-value">${esc(categoryName(state.categoryKey))}</div><div class="hint">수수료 ${Math.round(state.feeRate * 100)}% · 길드 상점 ${guildRate}%</div></div>`;
 
   $("#calcRows").innerHTML = rows.map((row, index) => {
     const missing = row.missing_prices || [];
@@ -151,6 +157,7 @@ function renderCalculations() {
           <div class="profit-meta">
             <span class="badge">${esc(row.profession)}</span>
             ${row.required_level ? `<span class="badge">Lv.${row.required_level}</span>` : ""}
+            ${row.guild_discount_enabled ? `<span class="badge fixed">길드 상점 ${guildRate}%</span>` : ""}
             ${!completePrice ? `<span class="badge warning">시세 ${missing.length}개 필요</span>` : ""}
           </div>
         </div>
@@ -168,7 +175,15 @@ function renderCalculations() {
 window.showRecipe = (encoded) => {
   const row = state.calculations.find((item) => item.recipe_key === dec(encoded));
   if (!row) return;
-  const inputRows = row.inputs.map((item) => `<li><span>${esc(item.item_name)} × ${item.quantity}</span><strong>${item.price_known ? `${money(item.current_price)} / ${money(item.cost)}` : "시세 없음"}</strong></li>`).join("");
+  const inputRows = row.inputs.map((item) => {
+    const shopLabel = item.fixed_shop
+      ? `<span class="badge fixed">상점 고정가${item.guild_discount_applied ? " · 길드 4%" : ""}</span>`
+      : "";
+    const priceText = item.price_known
+      ? `${money(item.current_price)} / ${money(item.cost)}`
+      : "시세 없음";
+    return `<li><span>${esc(item.item_name)} × ${item.quantity} ${shopLabel}</span><strong>${priceText}</strong></li>`;
+  }).join("");
   const outputRows = row.outputs.map((item) => `<li><span>${esc(item.item_name)} × ${item.quantity}${item.probability !== 100 ? ` · ${item.probability}%` : ""}</span><strong>${item.price_known ? `${money(item.current_price)} / 기대 ${money(item.expected_gross)}` : "시세 없음"}</strong></li>`).join("");
   $("#recipeDialogBody").innerHTML = `
     <p class="section-kicker">${esc(row.profession)}${row.required_level ? ` · Lv.${row.required_level}` : ""}</p>
@@ -197,6 +212,22 @@ function priceSourceLabel(source) {
   if (source === "manual") return "직접 입력";
   if (source === "legacy_material" || source === "legacy_item") return "기존 시세";
   return "시세 없음";
+}
+
+function renderFixedShopPrices() {
+  const rows = state.fixedShopPrices || [];
+  $("#fixedShopCount").textContent = `${rows.length}개`;
+  $("#fixedShopList").innerHTML = rows.map((row) => `
+    <div class="fixed-shop-row">
+      <div>
+        <strong>${esc(row.item_name)}</strong>
+        <small>${esc(row.vendor || "마이스터빌 상점")} · 고정값</small>
+      </div>
+      <div class="fixed-shop-values">
+        <span>기본 <strong>${money(row.regular_price)}</strong></span>
+        <span class="guild-price">길드 <strong>${money(row.guild_price)}</strong></span>
+      </div>
+    </div>`).join("") || '<div class="empty-state">등록된 상점 고정가가 없습니다.</div>';
 }
 
 function renderPrices() {
@@ -356,18 +387,27 @@ async function loadRecords() {
 async function boot() {
   activateTabs();
   checkHealth();
-  const [config, meta, categories] = await Promise.all([
-    api("/api/config"), api("/api/meister/meta"), api("/api/meister/categories"),
+  const [config, meta, categories, fixedShopPrices] = await Promise.all([
+    api("/api/config"),
+    api("/api/meister/meta"),
+    api("/api/meister/categories"),
+    api("/api/meister/fixed-shop-prices"),
   ]);
   state.writeProtected = Boolean(config.write_protected);
   state.meta = meta;
+  state.gameRules = config.game_rules || meta.rules || {};
   state.categories = categories;
+  state.fixedShopPrices = fixedShopPrices;
   $("#feeRate").value = String(config.default_fee_rate || 0.05);
   state.feeRate = Number($("#feeRate").value);
   $("#adminToken").value = token();
   $("#catalogStatus").textContent = `제작법 ${meta.total_recipe_count}개 · ${meta.synced_at ? new Date(meta.synced_at).toLocaleDateString("ko-KR") : "동기화 정보 없음"}`;
+  const guildRate = Math.round(Number(state.gameRules.guild_shop_discount_rate || 0.04) * 100);
+  const pcBonus = Math.round(Number(state.gameRules.pc_room_craft_success_bonus_max || 0.10) * 100);
+  $("#fixedRuleSummary").textContent = `고정 규칙 · 일반 수수료 5% · PC방 정산 3% · 길드 장사꾼 ${guildRate}% · PC방 제작 성공률 보너스 최대 ${pcBonus}%는 기본 성공률이 검증된 레시피에만 반영`;
   renderCategoryChips($("#categoryChips"), state.categoryKey, "calc");
   renderCategoryChips($("#priceCategoryChips"), state.priceCategoryKey, "price");
+  renderFixedShopPrices();
 
   $("#saveToken").addEventListener("click", async () => {
     sessionStorage.setItem("maple_admin_token", $("#adminToken").value.trim());
