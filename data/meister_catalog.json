@@ -1,10 +1,11 @@
 {
-  "schema_version": 2,
-  "synced_at": "2026-08-24T06:03:31.166893+00:00",
+  "schema_version": 3,
+  "synced_at": "2026-08-24T06:16:11.449184+00:00",
   "source_policy": {
     "baseline": "메이플스토리 인벤 제작 DB",
     "official_guide": "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/379",
-    "note": "제3자 제작 DB를 전체 목록의 기준선으로 사용하며, 최신 공식 변경 및 장인/명장 누락은 별도 override 데이터로 보정합니다. 시세 데이터와 제작 카탈로그는 분리합니다."
+    "override_file": "data/meister_overrides.json",
+    "note": "제3자 제작 DB를 전체 목록 기준선으로 사용하고, 검증된 최신 공식 변경만 override로 보정합니다. 시세 데이터는 제작 카탈로그와 분리합니다."
   },
   "total_recipe_count": 1419,
   "categories": [
