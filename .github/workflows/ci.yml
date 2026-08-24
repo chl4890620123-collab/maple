@@ -29,6 +29,12 @@ jobs:
             exit 1
           fi
           node --check app/static/app.js
+          node --check app/static/features.js
+          test -s app/static/features.css
+          grep -q 'id="sortMode"' app/static/index.html
+          grep -q 'id="favoritesOnly"' app/static/index.html
+          grep -q '/features.js' app/static/index.html
+          grep -q '/features.css' app/static/index.html
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -69,6 +75,18 @@ try:
         meta = json.load(response)
     assert meta['total_recipe_count'] >= 50
     assert len(meta['categories']) == 5
+    with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=2) as response:
+        html = response.read().decode('utf-8')
+    assert 'id="sortMode"' in html
+    assert 'id="favoritesOnly"' in html
+    assert '/features.js' in html
+    with urllib.request.urlopen('http://127.0.0.1:18081/features.js', timeout=2) as response:
+        js = response.read().decode('utf-8')
+    assert 'FAVORITES_KEY' in js
+    assert 'renderCalculationsEnhanced' in js
+    with urllib.request.urlopen('http://127.0.0.1:18081/features.css', timeout=2) as response:
+        css = response.read().decode('utf-8')
+    assert '.favorite-button' in css
 except Exception:
     raise SystemExit(1)
 PY
