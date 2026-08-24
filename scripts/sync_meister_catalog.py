@@ -12,8 +12,10 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 
+ROOT = Path(__file__).resolve().parent.parent
 BASE_URL = "https://maple.inven.co.kr/dataninfo/recipe/list.php?retype={}"
-OUTPUT_PATH = Path(__file__).resolve().parent.parent / "data" / "meister_catalog.json"
+OUTPUT_PATH = ROOT / "data" / "meister_catalog.json"
+OVERRIDE_PATH = ROOT / "data" / "meister_overrides.json"
 USER_AGENT = "Mozilla/5.0 (compatible; MapleCraftAnalytics/1.0; +https://github.com/chl4890620123-collab/maple)"
 
 
@@ -72,11 +74,7 @@ def parse_entries(cell: Tag, *, outputs: bool) -> list[dict]:
     entries: list[dict] = []
     blocks = cell.find_all("li")
     if not blocks:
-        blocks = [
-            node
-            for node in cell.find_all(["div", "p"], recursive=False)
-            if clean_text(node.get_text(" ", strip=True))
-        ]
+        blocks = [node for node in cell.find_all(["div", "p"], recursive=False) if clean_text(node.get_text(" ", strip=True))]
 
     for block in blocks:
         name = text_anchor(block)
@@ -114,12 +112,7 @@ def find_recipe_table(soup: BeautifulSoup) -> Tag:
 
 
 def make_recipe_key(category_key: str, required_level: int | None, inputs: list[dict], outputs: list[dict]) -> str:
-    identity = {
-        "category": category_key,
-        "required_level": required_level,
-        "inputs": inputs,
-        "outputs": outputs,
-    }
+    identity = {"category": category_key, "required_level": required_level, "inputs": inputs, "outputs": outputs}
     raw = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"{category_key}-{hashlib.sha256(raw).hexdigest()[:16]}"
 
@@ -129,7 +122,6 @@ def parse_category(category: Category) -> dict:
     response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
     response.raise_for_status()
     response.encoding = response.apparent_encoding or "utf-8"
-
     soup = BeautifulSoup(response.text, "lxml")
     table = find_recipe_table(soup)
     recipes: list[dict] = []
@@ -139,13 +131,11 @@ def parse_category(category: Category) -> dict:
         cells = row.find_all("td", recursive=False)
         if len(cells) < 3:
             continue
-
         title_text = clean_text(cells[0].get_text(" ", strip=True))
         inputs = parse_entries(cells[1], outputs=False)
         outputs = parse_entries(cells[2], outputs=True)
         if not inputs or not outputs:
             continue
-
         required_level = parse_required_level(title_text, category)
         primary_name = outputs[0]["name"]
         display_name = ITEM_LEVEL_PREFIX_RE.sub("", primary_name).strip() or primary_name
@@ -153,32 +143,59 @@ def parse_category(category: Category) -> dict:
         if recipe_key in seen_keys:
             continue
         seen_keys.add(recipe_key)
-
-        recipes.append(
-            {
-                "recipe_key": recipe_key,
-                "name": display_name,
-                "category_key": category.key,
-                "profession": category.name,
-                "required_level": required_level,
-                "inputs": inputs,
-                "outputs": outputs,
-                "source_url": url,
-                "source_label": "메이플스토리 인벤 제작 DB",
-                "verification_status": "third_party_baseline",
-            }
-        )
+        recipes.append({
+            "recipe_key": recipe_key,
+            "name": display_name,
+            "category_key": category.key,
+            "profession": category.name,
+            "required_level": required_level,
+            "inputs": inputs,
+            "outputs": outputs,
+            "source_url": url,
+            "source_label": "메이플스토리 인벤 제작 DB",
+            "verification_status": "third_party_baseline",
+        })
 
     if not recipes:
         raise RuntimeError(f"{category.name} 레시피가 0개로 파싱되었습니다.")
+    return {"key": category.key, "name": category.name, "source_url": url, "recipe_count": len(recipes), "recipes": recipes}
 
-    return {
-        "key": category.key,
-        "name": category.name,
-        "source_url": url,
-        "recipe_count": len(recipes),
-        "recipes": recipes,
-    }
+
+def apply_overrides(categories: list[dict]) -> list[dict]:
+    if not OVERRIDE_PATH.exists():
+        return categories
+    overrides = json.loads(OVERRIDE_PATH.read_text(encoding="utf-8"))
+    disabled = set(overrides.get("disable", []))
+    replacements = {recipe["recipe_key"]: recipe for recipe in overrides.get("replace", [])}
+    by_category = {category["key"]: category for category in categories}
+
+    for category in categories:
+        merged = []
+        for recipe in category["recipes"]:
+            key = recipe["recipe_key"]
+            if key in disabled:
+                continue
+            if key in replacements:
+                replacement = replacements[key]
+                if replacement.get("category_key") != category["key"]:
+                    raise RuntimeError(f"override category mismatch: {key}")
+                merged.append(replacement)
+            else:
+                merged.append(recipe)
+        category["recipes"] = merged
+
+    for recipe in overrides.get("add", []):
+        category_key = recipe.get("category_key")
+        if category_key not in by_category:
+            raise RuntimeError(f"override add category mismatch: {category_key}")
+        if not recipe.get("recipe_key"):
+            recipe["recipe_key"] = make_recipe_key(category_key, recipe.get("required_level"), recipe["inputs"], recipe["outputs"])
+        recipe.setdefault("verification_status", "official_override")
+        by_category[category_key]["recipes"].append(recipe)
+
+    for category in categories:
+        category["recipe_count"] = len(category["recipes"])
+    return categories
 
 
 def validate_catalog(categories: list[dict]) -> None:
@@ -186,44 +203,47 @@ def validate_catalog(categories: list[dict]) -> None:
     actual = {category["key"] for category in categories}
     if actual != expected:
         raise RuntimeError(f"카테고리 불일치: expected={sorted(expected)}, actual={sorted(actual)}")
-
+    all_keys: list[str] = []
     total = 0
     for category in categories:
         count = len(category["recipes"])
         total += count
         if count < 5:
             raise RuntimeError(f"{category['name']} 레시피가 비정상적으로 적습니다: {count}")
-        keys = [recipe["recipe_key"] for recipe in category["recipes"]]
-        if len(keys) != len(set(keys)):
-            raise RuntimeError(f"{category['name']} recipe_key 중복이 있습니다.")
-
+        for recipe in category["recipes"]:
+            if not recipe.get("inputs") or not recipe.get("outputs"):
+                raise RuntimeError(f"입출력이 비어 있는 레시피: {recipe.get('recipe_key')}")
+            for output in recipe["outputs"]:
+                probability = float(output.get("probability", 100))
+                if probability <= 0 or probability > 100:
+                    raise RuntimeError(f"잘못된 제작 확률: {recipe['recipe_key']} = {probability}")
+            all_keys.append(recipe["recipe_key"])
     if total < 50:
         raise RuntimeError(f"전체 레시피 수가 비정상적으로 적습니다: {total}")
+    if len(all_keys) != len(set(all_keys)):
+        raise RuntimeError("전체 카탈로그에 recipe_key 중복이 있습니다.")
 
 
 def main() -> int:
-    categories = []
-    total = 0
-    for category in CATEGORIES:
-        parsed = parse_category(category)
-        categories.append(parsed)
-        total += parsed["recipe_count"]
-        print(f"{category.name}: {parsed['recipe_count']} recipes")
-
+    categories = [parse_category(category) for category in CATEGORIES]
+    categories = apply_overrides(categories)
     validate_catalog(categories)
+    total = sum(len(category["recipes"]) for category in categories)
+    for category in categories:
+        print(f"{category['name']}: {len(category['recipes'])} recipes")
+
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "source_policy": {
             "baseline": "메이플스토리 인벤 제작 DB",
             "official_guide": "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/379",
-            "note": "제3자 제작 DB를 전체 목록의 기준선으로 사용하며, 최신 공식 변경 및 장인/명장 누락은 별도 override 데이터로 보정합니다. 시세 데이터와 제작 카탈로그는 분리합니다.",
+            "override_file": "data/meister_overrides.json",
+            "note": "제3자 제작 DB를 전체 목록 기준선으로 사용하고, 검증된 최신 공식 변경만 override로 보정합니다. 시세 데이터는 제작 카탈로그와 분리합니다.",
         },
         "total_recipe_count": total,
         "categories": categories,
     }
-
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {total} recipes -> {OUTPUT_PATH}")
     return 0

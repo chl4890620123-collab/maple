@@ -4,12 +4,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import service
+from . import meister, service
 from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
-from .schemas import CraftCreate, PriceUpdate, SaleCreate
+from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, SaleCreate
 
-app = FastAPI(title="Maple Craft Analytics", version="0.1.0")
+app = FastAPI(title="Maple Craft Analytics", version="0.2.0")
 
 if CORS_ORIGINS:
     app.add_middleware(
@@ -24,6 +24,7 @@ if CORS_ORIGINS:
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    meister.init_market_prices()
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
@@ -44,6 +45,51 @@ def public_config():
     }
 
 
+@app.get("/api/meister/meta")
+def meister_meta():
+    return meister.catalog_meta()
+
+
+@app.get("/api/meister/categories")
+def meister_categories():
+    return meister.categories()
+
+
+@app.get("/api/meister/calculations")
+def meister_calculations(
+    fee_rate: float = Query(default=DEFAULT_FEE_RATE, ge=0, le=0.2),
+    category_key: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=100),
+):
+    try:
+        return meister.calculations(fee_rate, category_key, q)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/market-prices")
+def market_prices(
+    category_key: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=100),
+):
+    if category_key and category_key not in meister.CATEGORY_ORDER:
+        raise HTTPException(status_code=400, detail="알 수 없는 마이스터빌 카테고리입니다.")
+    return meister.list_market_prices(category_key, q)
+
+
+@app.patch("/api/market-prices/bulk", dependencies=[Depends(require_admin)])
+def patch_market_prices(body: MarketPriceBulkUpdate):
+    try:
+        return {
+            "updated": meister.bulk_update_market_prices(
+                [entry.model_dump() for entry in body.prices]
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# Legacy endpoints are retained for existing craft/sale history and old data.
 @app.get("/api/materials")
 def get_materials():
     return service.list_materials()

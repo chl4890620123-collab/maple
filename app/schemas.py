@@ -5,6 +5,15 @@ class PriceUpdate(BaseModel):
     price: int = Field(ge=0)
 
 
+class MarketPriceEntry(BaseModel):
+    item_name: str = Field(min_length=1, max_length=255)
+    price: int = Field(ge=0)
+
+
+class MarketPriceBulkUpdate(BaseModel):
+    prices: list[MarketPriceEntry] = Field(min_length=1, max_length=500)
+
+
 class CraftCreate(BaseModel):
     item_id: int
     quantity: float = Field(gt=0)

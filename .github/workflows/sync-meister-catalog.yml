@@ -8,6 +8,7 @@ on:
       - ".github/workflows/sync-meister-catalog.yml"
       - "scripts/sync_meister_catalog.py"
       - "requirements-catalog.txt"
+      - "data/meister_overrides.json"
   schedule:
     - cron: "20 3 * * *"
 
