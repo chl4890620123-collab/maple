@@ -66,6 +66,7 @@ jobs:
           for attempt in $(seq 1 30); do
             if python - <<'PY'
 import json
+import urllib.parse
 import urllib.request
 
 try:
@@ -75,18 +76,32 @@ try:
         meta = json.load(response)
     assert meta['total_recipe_count'] >= 50
     assert len(meta['categories']) == 5
+
+    query = urllib.parse.urlencode({'category_key': 'accessory', 'fee_rate': '0.05'})
+    with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/calculations?' + query, timeout=5) as response:
+        calculations = json.load(response)
+    assert calculations
+    assert any(int(row.get('item_level') or 0) > 0 for row in calculations)
+    assert all(int(row.get('input_type_count') or 0) >= 1 for row in calculations[:20])
+    assert all(float(row.get('input_total_quantity') or 0) > 0 for row in calculations[:20])
+    assert all(int(row.get('output_type_count') or 0) >= 1 for row in calculations[:20])
+    assert all(float(row.get('output_expected_quantity') or 0) > 0 for row in calculations[:20])
+
     with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=2) as response:
         html = response.read().decode('utf-8')
     assert 'id="sortMode"' in html
     assert 'id="favoritesOnly"' in html
+    assert 'id="rankLimit"' in html
     assert '/features.js' in html
     with urllib.request.urlopen('http://127.0.0.1:18081/features.js', timeout=2) as response:
         js = response.read().decode('utf-8')
     assert 'FAVORITES_KEY' in js
     assert 'renderCalculationsEnhanced' in js
+    assert '아이템 Lv.' in js
     with urllib.request.urlopen('http://127.0.0.1:18081/features.css', timeout=2) as response:
         css = response.read().decode('utf-8')
     assert '.favorite-button' in css
+    assert '.recipe-table' in css
 except Exception:
     raise SystemExit(1)
 PY
