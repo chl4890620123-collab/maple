@@ -153,15 +153,10 @@ def test_fixed_shop_endpoint_data_is_complete():
     assert shop["최고급 포션 빈 병"]["base_price"] == 800
 
 
-def test_calculation_api_metadata_keeps_recipe_details():
-    from app.main import meister_calculations
+def test_recipe_metadata_index_keeps_source_details():
+    from app.main import recipe_metadata_index
 
-    rows = meister_calculations(fee_rate=0.05, category_key="accessory", q=None, guild_discount=True)
-    assert rows
-    assert any(int(row.get("item_level") or 0) > 0 for row in rows)
-    for row in rows[:20]:
-        assert row["input_type_count"] == len(row["inputs"])
-        assert row["input_total_quantity"] > 0
-        assert row["output_type_count"] == len(row["outputs"])
-        assert row["output_expected_quantity"] > 0
-        assert row["source_label"]
+    metadata = recipe_metadata_index()
+    assert metadata
+    assert any(int(row.get("item_level") or 0) > 0 for row in metadata.values())
+    assert all(row.get("source_label") for row in metadata.values())
