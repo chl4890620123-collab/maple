@@ -1,0 +1,52 @@
+name: Sync Meisterville catalog
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sync-meister-catalog.yml"
+      - "scripts/sync_meister_catalog.py"
+      - "requirements-catalog.txt"
+  schedule:
+    - cron: "20 3 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: meister-catalog-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install catalog dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-catalog.txt
+      - name: Sync and validate catalog
+        run: |
+          python scripts/sync_meister_catalog.py
+          python scripts/check_text_integrity.py
+      - name: Commit catalog changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/meister_catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog is already up to date."
+            exit 0
+          fi
+          git commit -m "data: sync Meisterville catalog"
+          git pull --rebase origin main
+          git push origin HEAD:main
