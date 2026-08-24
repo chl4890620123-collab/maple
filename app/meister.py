@@ -24,7 +24,10 @@ def load_catalog() -> dict:
     expected = set(CATEGORY_ORDER)
     if actual != expected:
         raise RuntimeError(f"마이스터빌 카테고리 불일치: {sorted(actual)}")
-    return _apply_overrides(data)
+    # sync_meister_catalog.py applies meister_overrides.json before writing the
+    # tracked snapshot. Runtime reapplication would duplicate future "add"
+    # overrides and make production differ from the reviewed catalog file.
+    return data
 
 
 def _apply_overrides(catalog: dict) -> dict:
@@ -164,7 +167,7 @@ def _create_market_tables(conn) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_name TEXT NOT NULL,
                 price INTEGER NOT NULL CHECK(price >= 0),
-                source TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'catalog_unpriced',
                 recorded_at TEXT NOT NULL
             )
             """
