@@ -1,6 +1,8 @@
 import os
 import tempfile
 
+import pytest
+
 
 def _configure_sqlite(db_path: str):
     os.environ["DB_ENGINE"] = "sqlite"
@@ -56,7 +58,7 @@ def test_expected_profit_uses_output_probability():
         "결과Y": {"current_price": 50, "price_known": True, "source": "manual"},
     }
 
-    result = calculate_recipe(recipe, prices, 0.05)
+    result = calculate_recipe(recipe, prices, 0.05, guild_discount=False)
     assert result["price_complete"] is True
     assert result["input_cost"] == 100
     assert result["gross_expected"] == 185
@@ -86,6 +88,39 @@ def test_missing_price_never_becomes_fake_profit():
     assert result["missing_prices"] == ["제련물"]
 
 
+def test_fixed_shop_price_uses_guild_discount():
+    from app import game_rules
+    from app.meister import calculate_recipe
+
+    recipe = {
+        "recipe_key": "test-shop",
+        "name": "상점 테스트",
+        "category_key": "accessory",
+        "profession": "장신구제작",
+        "inputs": [{"name": "중급 연마제", "quantity": 2}],
+        "outputs": [{"name": "결과", "quantity": 1, "probability": 100}],
+    }
+    prices = {"결과": {"current_price": 20000, "price_known": True, "source": "manual"}}
+
+    normal = calculate_recipe(recipe, prices, 0.05, guild_discount=False)
+    guild = calculate_recipe(recipe, prices, 0.05, guild_discount=True)
+
+    assert normal["input_cost"] == 10000
+    assert guild["input_cost"] == 9600
+    assert guild["inputs"][0]["source"] == "fixed_shop"
+    assert guild["inputs"][0]["guild_discount_applied"] is True
+    assert game_rules.GUILD_SHOP_DISCOUNT_RATE == 0.04
+
+
+def test_only_fixed_auction_fees_are_allowed():
+    from app.game_rules import validate_auction_fee_rate
+
+    assert validate_auction_fee_rate(0.05) == 0.05
+    assert validate_auction_fee_rate(0.03) == 0.03
+    with pytest.raises(ValueError):
+        validate_auction_fee_rate(0.04)
+
+
 def test_market_price_is_unique_across_input_and_output_roles():
     with tempfile.TemporaryDirectory() as temp_dir:
         db, meister = _configure_sqlite(os.path.join(temp_dir, "meister.db"))
@@ -95,3 +130,16 @@ def test_market_price_is_unique_across_input_and_output_roles():
         names = [row["item_name"] for row in prices]
         assert len(names) == len(set(names))
         assert any(set(row["roles"]) == {"input", "output"} for row in prices)
+        assert "중급 연마제" not in names
+
+
+def test_fixed_shop_endpoint_data_is_complete():
+    from app import game_rules
+
+    shop = game_rules.fixed_shop_index()
+    assert shop["하급 연마제"]["base_price"] == 1000
+    assert shop["중급 연마제"]["base_price"] == 5000
+    assert shop["고급 연마제"]["base_price"] == 10000
+    assert shop["최고급 연마제"]["base_price"] == 50000
+    assert shop["최고급 허브오일병"]["base_price"] == 1000
+    assert shop["최고급 포션 빈 병"]["base_price"] == 800

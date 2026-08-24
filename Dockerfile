@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY data/seed.json ./data/seed.json
+COPY data/meister_catalog.json ./data/meister_catalog.json
+COPY data/meister_overrides.json ./data/meister_overrides.json
+COPY data/fixed_shop_prices.json ./data/fixed_shop_prices.json
 
 RUN mkdir -p /app/data
 

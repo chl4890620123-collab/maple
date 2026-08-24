@@ -4,12 +4,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import meister, service
+from . import game_rules, meister, service
 from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
 from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, SaleCreate
 
-app = FastAPI(title="Maple Craft Analytics", version="0.2.0")
+app = FastAPI(title="Maple Craft Analytics", version="0.3.0")
 
 if CORS_ORIGINS:
     app.add_middleware(
@@ -42,6 +42,7 @@ def public_config():
     return {
         "default_fee_rate": DEFAULT_FEE_RATE,
         "write_protected": bool(ADMIN_TOKEN),
+        "game_rules": game_rules.public_rules(),
     }
 
 
@@ -55,14 +56,20 @@ def meister_categories():
     return meister.categories()
 
 
+@app.get("/api/meister/fixed-shop-prices")
+def meister_fixed_shop_prices():
+    return meister.fixed_shop_items()
+
+
 @app.get("/api/meister/calculations")
 def meister_calculations(
-    fee_rate: float = Query(default=DEFAULT_FEE_RATE, ge=0, le=0.2),
+    fee_rate: float = Query(default=DEFAULT_FEE_RATE),
     category_key: str | None = Query(default=None),
     q: str | None = Query(default=None, max_length=100),
+    guild_discount: bool = Query(default=game_rules.DEFAULT_GUILD_DISCOUNT_ENABLED),
 ):
     try:
-        return meister.calculations(fee_rate, category_key, q)
+        return meister.calculations(fee_rate, category_key, q, guild_discount)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

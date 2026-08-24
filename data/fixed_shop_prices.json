@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "note": "마이스터빌 NPC 상점의 고정 구매가입니다. 경매장 시세와 분리해 제작 원가에 사용하며, 장사꾼 길드 스킬 적용 여부는 품목별 guild_discount_eligible로 관리합니다.",
+  "guild_discount_rule": {
+    "rate": 0.04,
+    "exception": "판매 가격 대비 구매 가격이 70% 이상인 품목에는 장사꾼 할인이 적용되지 않습니다. 아래 목록은 전문기술 재료 상점의 적용 대상 기준선입니다."
+  },
+  "items": [
+    {"item_name":"하급 연마제","base_price":1000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 자료 교차검증","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"중급 연마제","base_price":5000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 자료 교차검증","source_url":"https://leeinformation.tistory.com/4"},
+    {"item_name":"고급 연마제","base_price":10000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 자료 교차검증","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"최고급 연마제","base_price":50000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"최근 메이플스토리 제작 공략 교차검증","source_url":"https://gamer-gorani.tistory.com/entry/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC-%EB%8F%84%EB%AF%B8%EB%84%A4%EC%9D%B4%ED%84%B0-%ED%8E%9C%EB%8D%98%ED%8A%B8-%EC%96%BB%EB%8A%94-%EB%B2%95-%EC%95%84%EC%B9%B4%EC%9D%B4%EB%9F%BC-%EB%93%9C%EB%9E%8D-%EC%A0%9C%EC%9E%91-%EB%B9%84%EC%9A%A9"},
+    {"item_name":"하급 허브오일병","base_price":100,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 자료","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"중급 허브오일병","base_price":300,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 자료","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"고급 허브오일병","base_price":500,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 자료","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"최고급 허브오일병","base_price":1000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"최근 메이플스토리 제작 공략 교차검증","source_url":"https://www.lv1arcade.com/news/2216/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC-%EC%A5%AC%EB%8B%88%ED%8D%BC%EB%B2%A0%EB%A6%AC-%EC%94%A8%EC%95%97-%EC%98%A4%EC%9D%BC-%EC%8B%9C%EC%84%B8-%ED%8F%AD%EB%93%B1-%EB%A9%94%EC%86%8C-%EB%8F%88%EB%B2%8C%EC%9D%B4-%EA%B3%B5%EB%9E%B5"},
+    {"item_name":"하급 거푸집","base_price":100,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"중급 거푸집","base_price":300,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"고급 거푸집","base_price":500,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"최고급 거푸집","base_price":1000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://mapleriverview.tistory.com/25"},
+    {"item_name":"하급 포션 빈 병","base_price":100,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://1-start.tistory.com/category/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%20%EC%A0%84%EB%AC%B8%EA%B8%B0%EC%88%A0%20%EC%A0%9C%EC%9E%91%20%EB%B0%8F%20%EC%9E%AC%EB%A3%8C?page=3"},
+    {"item_name":"중급 포션 빈 병","base_price":200,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://1-start.tistory.com/category/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%20%EC%A0%84%EB%AC%B8%EA%B8%B0%EC%88%A0%20%EC%A0%9C%EC%9E%91%20%EB%B0%8F%20%EC%9E%AC%EB%A3%8C?page=3"},
+    {"item_name":"고급 포션 빈 병","base_price":400,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://1-start.tistory.com/category/%EB%A9%94%EC%9D%B4%ED%94%8C%EC%8A%A4%ED%86%A0%EB%A6%AC%20%EC%A0%84%EB%AC%B8%EA%B8%B0%EC%88%A0%20%EC%A0%9C%EC%9E%91%20%EB%B0%8F%20%EC%9E%AC%EB%A3%8C?page=3"},
+    {"item_name":"최고급 포션 빈 병","base_price":800,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 연금술 제작 공략 교차검증","source_url":"https://1-start.tistory.com/219?category=962936"},
+    {"item_name":"하급 포션 응고제","base_price":50,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://maplestar.io/news/updates/866aacd1-3539-46e0-95cb-44f1f98f0ba7"},
+    {"item_name":"중급 포션 응고제","base_price":100,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://maplestar.io/news/updates/866aacd1-3539-46e0-95cb-44f1f98f0ba7"},
+    {"item_name":"고급 포션 응고제","base_price":200,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://maplestar.io/news/updates/866aacd1-3539-46e0-95cb-44f1f98f0ba7"},
+    {"item_name":"최고급 포션 응고제","base_price":400,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://maplestar.io/news/updates/866aacd1-3539-46e0-95cb-44f1f98f0ba7"},
+    {"item_name":"연금술사의 돌","base_price":5000,"guild_discount_eligible":true,"vendor":"맹스","source_label":"메이플스토리 전문기술 상점 기준선","source_url":"https://www.inven.co.kr/board/maple/2304/6271"}
+  ]
+}

@@ -12,13 +12,13 @@ jobs:
   sqlite-regression:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
-      - uses: actions/setup-node@v4
+          python-version: '3.12'
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Validate UTF-8, JSON and tracked artifacts
         run: |
           python scripts/check_text_integrity.py
@@ -45,6 +45,40 @@ jobs:
         run: docker compose config >/dev/null
       - name: Docker build
         run: docker build --platform linux/amd64 -t maple-craft-analytics:ci .
+      - name: Docker runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name maple-ci-smoke \
+            -e DB_ENGINE=sqlite \
+            -e DB_PATH=/tmp/maple-ci.db \
+            -p 127.0.0.1:18081:8000 \
+            maple-craft-analytics:ci
+          cleanup() { docker rm -f maple-ci-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if python - <<'PY'
+import json
+import urllib.request
+
+try:
+    with urllib.request.urlopen('http://127.0.0.1:18081/api/health', timeout=2) as response:
+        assert response.status == 200
+    with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/meta', timeout=2) as response:
+        meta = json.load(response)
+    assert meta['total_recipe_count'] >= 50
+    assert len(meta['categories']) == 5
+except Exception:
+    raise SystemExit(1)
+PY
+            then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs maple-ci-smoke
+          exit 1
 
   mariadb-integration:
     runs-on: ubuntu-latest
@@ -64,10 +98,10 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: '3.12'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

@@ -4,11 +4,12 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from . import config
+from . import config, game_rules
 from .db import connection, now_iso
 
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "meister_catalog.json"
+OVERRIDES_PATH = Path(__file__).resolve().parent.parent / "data" / "meister_overrides.json"
 CATEGORY_ORDER = ("herbalism", "mining", "equipment", "accessory", "alchemy")
 ROLE_LABELS = {"input": "재료", "output": "결과물"}
 
@@ -23,7 +24,41 @@ def load_catalog() -> dict:
     expected = set(CATEGORY_ORDER)
     if actual != expected:
         raise RuntimeError(f"마이스터빌 카테고리 불일치: {sorted(actual)}")
-    return data
+    return _apply_overrides(data)
+
+
+def _apply_overrides(catalog: dict) -> dict:
+    if not OVERRIDES_PATH.exists():
+        return catalog
+    overrides = json.loads(OVERRIDES_PATH.read_text(encoding="utf-8"))
+    disabled = set(overrides.get("disable", []))
+    replacements = {item["recipe_key"]: item for item in overrides.get("replace", []) if item.get("recipe_key")}
+    additions = overrides.get("add", [])
+
+    for category in catalog.get("categories", []):
+        merged = []
+        for recipe in category.get("recipes", []):
+            key = recipe.get("recipe_key")
+            if key in disabled:
+                continue
+            if key in replacements:
+                replacement = {**recipe, **replacements[key]}
+                merged.append(replacement)
+            else:
+                merged.append(recipe)
+        category["recipes"] = merged
+        category["recipe_count"] = len(merged)
+
+    by_category = {item["key"]: item for item in catalog.get("categories", [])}
+    for recipe in additions:
+        key = recipe.get("category_key")
+        if key not in by_category:
+            continue
+        by_category[key]["recipes"].append(recipe)
+        by_category[key]["recipe_count"] = len(by_category[key]["recipes"])
+
+    catalog["total_recipe_count"] = sum(len(category.get("recipes", [])) for category in catalog.get("categories", []))
+    return catalog
 
 
 def catalog_meta() -> dict:
@@ -33,6 +68,7 @@ def catalog_meta() -> dict:
         "synced_at": catalog.get("synced_at"),
         "total_recipe_count": catalog.get("total_recipe_count", 0),
         "source_policy": catalog.get("source_policy", {}),
+        "rules": game_rules.public_rules(),
         "categories": [
             {
                 "key": category["key"],
@@ -69,6 +105,22 @@ def catalog_item_index(category_key: str | None = None) -> dict[str, dict]:
                 item["roles"].add(role)
                 item["categories"].add(recipe["category_key"])
     return index
+
+
+def fixed_shop_items() -> list[dict]:
+    rows = []
+    for item in game_rules.fixed_shop_catalog().get("items", []):
+        with_discount = game_rules.shop_purchase_price(item["item_name"], True)
+        without_discount = game_rules.shop_purchase_price(item["item_name"], False)
+        rows.append(
+            {
+                **item,
+                "guild_price": with_discount["effective_price"] if with_discount else item["base_price"],
+                "regular_price": without_discount["effective_price"] if without_discount else item["base_price"],
+            }
+        )
+    rows.sort(key=lambda row: row["item_name"])
+    return rows
 
 
 def _create_market_tables(conn) -> None:
@@ -156,12 +208,16 @@ def _migrate_legacy_prices(conn) -> None:
             candidates[row["name"]] = candidate
 
     for name, value in candidates.items():
+        if game_rules.fixed_shop_item(name):
+            continue
         _insert_market_if_missing(conn, name, value["price"], value["source"], value["updated_at"] or now_iso())
 
 
 def _ensure_catalog_market_rows(conn) -> None:
     ts = now_iso()
     for item_name in catalog_item_index():
+        if game_rules.fixed_shop_item(item_name):
+            continue
         _insert_market_if_missing(conn, item_name, 0, "catalog_unpriced", ts)
 
 
@@ -195,6 +251,8 @@ def list_market_prices(category_key: str | None = None, q: str | None = None) ->
 
     rows = []
     for name, metadata in item_index.items():
+        if game_rules.fixed_shop_item(name):
+            continue
         if needle and needle not in name.casefold():
             continue
         price = prices.get(name, {"current_price": 0, "source": "catalog_unpriced", "updated_at": None, "price_known": False})
@@ -208,6 +266,7 @@ def list_market_prices(category_key: str | None = None, q: str | None = None) ->
                 "roles": sorted(metadata["roles"]),
                 "role_labels": [ROLE_LABELS[role] for role in sorted(metadata["roles"])],
                 "categories": sorted(metadata["categories"], key=lambda key: CATEGORY_ORDER.index(key)),
+                "price_locked": False,
             }
         )
     rows.sort(key=lambda row: (not row["price_known"], row["item_name"]))
@@ -215,14 +274,19 @@ def list_market_prices(category_key: str | None = None, q: str | None = None) ->
 
 
 def bulk_update_market_prices(entries: list[dict]) -> list[dict]:
-    allowed = set(catalog_item_index())
+    catalog_names = set(catalog_item_index())
+    fixed_names = set(game_rules.fixed_shop_index())
+    allowed = catalog_names - fixed_names
     unknown = sorted({entry["item_name"] for entry in entries if entry["item_name"] not in allowed})
     if unknown:
-        raise ValueError(f"카탈로그에 없는 아이템입니다: {', '.join(unknown[:5])}")
+        raise ValueError(f"변동 시세로 수정할 수 없는 아이템입니다: {', '.join(unknown[:5])}")
 
     deduped: dict[str, int] = {}
     for entry in entries:
-        deduped[entry["item_name"]] = int(entry["price"])
+        price = int(entry["price"])
+        if price < 0:
+            raise ValueError("시세는 0 이상이어야 합니다.")
+        deduped[entry["item_name"]] = price
 
     ts = now_iso()
     with connection() as conn:
@@ -244,22 +308,25 @@ def bulk_update_market_prices(entries: list[dict]) -> list[dict]:
                 (item_name, price, ts),
             )
 
-    updated = []
     with connection() as conn:
         prices = _price_rows(conn)
-        for item_name in deduped:
-            updated.append(prices[item_name])
-    return updated
+        return [prices[item_name] for item_name in deduped]
 
 
-def _price_record(prices: dict[str, dict], item_name: str) -> tuple[int, bool, str]:
+def _market_price_record(prices: dict[str, dict], item_name: str) -> tuple[int, bool, str]:
     row = prices.get(item_name)
     if row is None:
         return 0, False, "catalog_unpriced"
     return int(row["current_price"]), bool(row["price_known"]), row["source"]
 
 
-def calculate_recipe(recipe: dict, prices: dict[str, dict], fee_rate: float) -> dict:
+def calculate_recipe(
+    recipe: dict,
+    prices: dict[str, dict],
+    fee_rate: float,
+    guild_discount: bool = game_rules.DEFAULT_GUILD_DISCOUNT_ENABLED,
+) -> dict:
+    fee_rate = game_rules.validate_auction_fee_rate(fee_rate)
     missing: list[str] = []
     input_rows = []
     output_rows = []
@@ -269,26 +336,39 @@ def calculate_recipe(recipe: dict, prices: dict[str, dict], fee_rate: float) -> 
     outputs_complete = True
 
     for entry in recipe.get("inputs", []):
-        price, known, source = _price_record(prices, entry["name"])
+        item_name = entry["name"]
         quantity = float(entry.get("quantity", 1))
+        shop = game_rules.shop_purchase_price(item_name, guild_discount)
+        if shop is not None:
+            price = int(shop["effective_price"])
+            known = True
+            source = "fixed_shop"
+            fixed = True
+        else:
+            price, known, source = _market_price_record(prices, item_name)
+            fixed = False
+
         if not known:
             inputs_complete = False
-            missing.append(entry["name"])
+            missing.append(item_name)
         cost = price * quantity
         input_cost_value += cost
         input_rows.append(
             {
-                "item_name": entry["name"],
+                "item_name": item_name,
                 "quantity": quantity,
                 "current_price": price,
                 "price_known": known,
                 "source": source,
+                "fixed_shop": fixed,
+                "shop_base_price": shop["base_price"] if shop else None,
+                "guild_discount_applied": shop["guild_discount_applied"] if shop else False,
                 "cost": cost if known else None,
             }
         )
 
     for entry in recipe.get("outputs", []):
-        price, known, source = _price_record(prices, entry["name"])
+        price, known, source = _market_price_record(prices, entry["name"])
         quantity = float(entry.get("quantity", 1))
         probability = float(entry.get("probability", 100))
         expected_quantity = quantity * probability / 100.0
@@ -334,10 +414,19 @@ def calculate_recipe(recipe: dict, prices: dict[str, dict], fee_rate: float) -> 
         "margin_rate": margin,
         "price_complete": complete,
         "missing_prices": sorted(set(missing)),
+        "fee_rate": fee_rate,
+        "guild_discount_enabled": bool(guild_discount),
+        "guild_shop_discount_rate": game_rules.GUILD_SHOP_DISCOUNT_RATE,
     }
 
 
-def calculations(fee_rate: float, category_key: str | None = None, q: str | None = None) -> list[dict]:
+def calculations(
+    fee_rate: float,
+    category_key: str | None = None,
+    q: str | None = None,
+    guild_discount: bool = game_rules.DEFAULT_GUILD_DISCOUNT_ENABLED,
+) -> list[dict]:
+    game_rules.validate_auction_fee_rate(fee_rate)
     if category_key and category_key not in CATEGORY_ORDER:
         raise ValueError("알 수 없는 마이스터빌 카테고리입니다.")
     needle = (q or "").strip().casefold()
@@ -348,7 +437,7 @@ def calculations(fee_rate: float, category_key: str | None = None, q: str | None
     for recipe in _all_recipes(category_key):
         if needle and needle not in recipe["name"].casefold():
             continue
-        rows.append(calculate_recipe(recipe, prices, fee_rate))
+        rows.append(calculate_recipe(recipe, prices, fee_rate, guild_discount))
 
     rows.sort(
         key=lambda row: (
