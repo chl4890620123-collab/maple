@@ -37,6 +37,7 @@ CATEGORIES = (
 
 QTY_RE = re.compile(r"(?:x|×)\s*([0-9]+(?:\.[0-9]+)?)", re.I)
 PROB_RE = re.compile(r"\(([0-9]+(?:\.[0-9]+)?)%\)")
+ITEM_LEVEL_RE = re.compile(r"^Lv\.\s*([0-9]+)", re.I)
 ITEM_LEVEL_PREFIX_RE = re.compile(r"^Lv\.\s*[0-9]+\s+")
 
 
@@ -52,6 +53,11 @@ def parse_quantity(text: str) -> float:
 def parse_probability(text: str) -> float:
     match = PROB_RE.search(text)
     return float(match.group(1)) if match else 100.0
+
+
+def parse_item_level(text: str) -> int | None:
+    match = ITEM_LEVEL_RE.search(text)
+    return int(match.group(1)) if match else None
 
 
 def parse_required_level(text: str, category: Category) -> int | None:
@@ -112,6 +118,8 @@ def find_recipe_table(soup: BeautifulSoup) -> Tag:
 
 
 def make_recipe_key(category_key: str, required_level: int | None, inputs: list[dict], outputs: list[dict]) -> str:
+    # Keep the key independent from display-only metadata such as item_level.
+    # This preserves market-price links, overrides and browser favorites across catalog refreshes.
     identity = {"category": category_key, "required_level": required_level, "inputs": inputs, "outputs": outputs}
     raw = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"{category_key}-{hashlib.sha256(raw).hexdigest()[:16]}"
@@ -136,6 +144,7 @@ def parse_category(category: Category) -> dict:
         outputs = parse_entries(cells[2], outputs=True)
         if not inputs or not outputs:
             continue
+        item_level = parse_item_level(title_text)
         required_level = parse_required_level(title_text, category)
         primary_name = outputs[0]["name"]
         display_name = ITEM_LEVEL_PREFIX_RE.sub("", primary_name).strip() or primary_name
@@ -148,6 +157,7 @@ def parse_category(category: Category) -> dict:
             "name": display_name,
             "category_key": category.key,
             "profession": category.name,
+            "item_level": item_level,
             "required_level": required_level,
             "inputs": inputs,
             "outputs": outputs,
@@ -213,7 +223,15 @@ def validate_catalog(categories: list[dict]) -> None:
         for recipe in category["recipes"]:
             if not recipe.get("inputs") or not recipe.get("outputs"):
                 raise RuntimeError(f"입출력이 비어 있는 레시피: {recipe.get('recipe_key')}")
+            item_level = recipe.get("item_level")
+            if item_level is not None and int(item_level) <= 0:
+                raise RuntimeError(f"잘못된 아이템 레벨: {recipe['recipe_key']} = {item_level}")
+            for entry in recipe["inputs"]:
+                if float(entry.get("quantity", 0)) <= 0:
+                    raise RuntimeError(f"잘못된 재료 수량: {recipe['recipe_key']} = {entry}")
             for output in recipe["outputs"]:
+                if float(output.get("quantity", 0)) <= 0:
+                    raise RuntimeError(f"잘못된 결과 수량: {recipe['recipe_key']} = {output}")
                 probability = float(output.get("probability", 100))
                 if probability <= 0 or probability > 100:
                     raise RuntimeError(f"잘못된 제작 확률: {recipe['recipe_key']} = {probability}")
@@ -233,7 +251,7 @@ def main() -> int:
         print(f"{category['name']}: {len(category['recipes'])} recipes")
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "source_policy": {
             "baseline": "메이플스토리 인벤 제작 DB",
