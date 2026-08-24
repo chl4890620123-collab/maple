@@ -9,7 +9,7 @@ from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
 from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, SaleCreate
 
-app = FastAPI(title="Maple Craft Analytics", version="0.3.1")
+app = FastAPI(title="Maple Craft Analytics", version="0.4.0")
 
 if CORS_ORIGINS:
     app.add_middleware(
@@ -30,6 +30,17 @@ def startup() -> None:
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
     if ADMIN_TOKEN and x_admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="관리자 토큰이 필요합니다.")
+
+
+def recipe_metadata_index() -> dict[str, dict]:
+    index: dict[str, dict] = {}
+    for category in meister.load_catalog().get("categories", []):
+        for recipe in category.get("recipes", []):
+            index[recipe["recipe_key"]] = {
+                "item_level": recipe.get("item_level"),
+                "source_label": recipe.get("source_label", "메이플스토리 인벤 제작 DB"),
+            }
+    return index
 
 
 @app.get("/api/health")
@@ -69,7 +80,19 @@ def meister_calculations(
     guild_discount: bool = Query(default=game_rules.DEFAULT_GUILD_DISCOUNT_ENABLED),
 ):
     try:
-        return meister.calculations(fee_rate, category_key, q, guild_discount)
+        rows = meister.calculations(fee_rate, category_key, q, guild_discount)
+        metadata = recipe_metadata_index()
+        for row in rows:
+            info = metadata.get(row["recipe_key"], {})
+            row["item_level"] = info.get("item_level")
+            row["source_label"] = info.get("source_label", "메이플스토리 인벤 제작 DB")
+            row["input_type_count"] = len(row.get("inputs", []))
+            row["input_total_quantity"] = sum(float(item.get("quantity", 0)) for item in row.get("inputs", []))
+            row["output_type_count"] = len(row.get("outputs", []))
+            row["output_expected_quantity"] = sum(
+                float(item.get("expected_quantity", 0)) for item in row.get("outputs", [])
+            )
+        return rows
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
