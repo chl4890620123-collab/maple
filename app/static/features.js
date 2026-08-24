@@ -24,10 +24,10 @@ function recipeStats(row) {
   const inputs = Array.isArray(row.inputs) ? row.inputs : [];
   const outputs = Array.isArray(row.outputs) ? row.outputs : [];
   return {
-    inputTypes: inputs.length,
-    inputQuantity: inputs.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-    outputTypes: outputs.length,
-    outputQuantity: outputs.reduce((sum, item) => sum + Number(item.expected_quantity ?? item.quantity ?? 0), 0),
+    inputTypes: Number(row.input_type_count ?? inputs.length),
+    inputQuantity: Number(row.input_total_quantity ?? inputs.reduce((sum, item) => sum + Number(item.quantity || 0), 0)),
+    outputTypes: Number(row.output_type_count ?? outputs.length),
+    outputQuantity: Number(row.output_expected_quantity ?? outputs.reduce((sum, item) => sum + Number(item.expected_quantity ?? item.quantity ?? 0), 0)),
     fixedShopInputs: inputs.filter((item) => item.fixed_shop).length,
     marketInputs: inputs.filter((item) => !item.fixed_shop).length,
     missingCount: Array.isArray(row.missing_prices) ? row.missing_prices.length : 0,
@@ -37,6 +37,10 @@ function recipeStats(row) {
 function verificationLabel(status) {
   if (status === "official_override") return "공식 보정";
   return "인벤 제작 DB 기준";
+}
+
+function recipeSourceLabel(row) {
+  return row.source_label || verificationLabel(row.verification_status);
 }
 
 function sourcePriceLabel(item) {
@@ -59,7 +63,7 @@ function compareRows(a, b, mode) {
     return av(a.input_cost, Infinity) - av(b.input_cost, Infinity) || av(b.expected_profit, -Infinity) - av(a.expected_profit, -Infinity);
   }
   if (mode === "level_asc") {
-    return av(a.required_level, Infinity) - av(b.required_level, Infinity) || av(b.expected_profit, -Infinity) - av(a.expected_profit, -Infinity);
+    return av(a.required_level, Infinity) - av(b.required_level, Infinity) || av(a.item_level, Infinity) - av(b.item_level, Infinity) || av(b.expected_profit, -Infinity) - av(a.expected_profit, -Infinity);
   }
   if (mode === "name_asc") return String(a.name).localeCompare(String(b.name), "ko");
   return av(b.expected_profit, -Infinity) - av(a.expected_profit, -Infinity) || String(a.name).localeCompare(String(b.name), "ko");
@@ -96,7 +100,7 @@ function renderInformationNotice() {
   const guide = policy.official_guide;
   target.innerHTML = `
     <strong>정보 기준</strong>
-    <span>전체 레시피·재료·수량은 ${esc(baseline)}를 기준선으로 사용하고, 검증된 공식 변경만 별도 보정합니다.</span>
+    <span>전체 레시피·재료·수량·아이템 레벨은 ${esc(baseline)}를 기준선으로 사용하고, 검증된 공식 변경만 별도 보정합니다.</span>
     ${guide ? `<a href="${esc(guide)}" target="_blank" rel="noopener noreferrer">공식 전문기술 가이드</a>` : ""}`;
 }
 
@@ -105,12 +109,12 @@ function renderCalculationsEnhanced() {
   const complete = rows.filter((row) => row.price_complete);
   const profitable = complete.filter((row) => Number(row.expected_profit) > 0);
   const top = profitable[0] || complete[0];
-  const favoriteCount = state.calculations.filter((row) => favoriteRecipeKeys.has(row.recipe_key)).length;
+  const favoriteCount = favoriteRecipeKeys.size;
   const guildRate = Math.round(Number(state.gameRules?.guild_shop_discount_rate || 0.04) * 100);
 
   $("#resultTitle").textContent = `${categoryName(state.categoryKey)} 제작 순위 · ${selectedSortLabel()}`;
   $("#resultCount").textContent = `${rows.length}개`;
-  $("#favoriteCount") && ($("#favoriteCount").textContent = `${favoriteCount}개`);
+  if ($("#favoriteCount")) $("#favoriteCount").textContent = `${favoriteCount}개`;
   $("#summaryCards").innerHTML = `
     <div class="metric primary">
       <div class="label">현재 1위</div>
@@ -139,8 +143,9 @@ function renderCalculationsEnhanced() {
             <strong>${esc(row.name)}</strong>
             <div class="profit-meta">
               <span class="badge">${esc(row.profession)}</span>
+              ${row.item_level ? `<span class="badge">아이템 Lv.${row.item_level}</span>` : ""}
               ${row.required_level ? `<span class="badge">전문기술 Lv.${row.required_level}</span>` : ""}
-              <span class="badge source">${esc(verificationLabel(row.verification_status))}</span>
+              <span class="badge source">${esc(recipeSourceLabel(row))}</span>
               ${stats.fixedShopInputs ? `<span class="badge fixed">상점 재료 ${stats.fixedShopInputs}종</span>` : ""}
               ${!completePrice ? `<span class="badge warning">시세 ${stats.missingCount}개 필요</span>` : ""}
             </div>
@@ -205,7 +210,7 @@ function detailedRecipeDialog(encoded) {
   $("#recipeDialogBody").innerHTML = `
     <div class="dialog-title-row">
       <div>
-        <p class="section-kicker">${esc(row.profession)}${row.required_level ? ` · 전문기술 Lv.${row.required_level}` : ""}</p>
+        <p class="section-kicker">${esc(row.profession)}${row.item_level ? ` · 아이템 Lv.${row.item_level}` : ""}${row.required_level ? ` · 전문기술 Lv.${row.required_level}` : ""}</p>
         <h2>${esc(row.name)}</h2>
       </div>
       <button type="button" id="dialogFavorite" class="favorite-button large ${favorite ? "active" : ""}">${favorite ? "★ 찜 해제" : "☆ 찜하기"}</button>
@@ -214,7 +219,7 @@ function detailedRecipeDialog(encoded) {
       <span>재료 ${stats.inputTypes}종 · 총 ${quantity(stats.inputQuantity)}개</span>
       <span>결과 ${stats.outputTypes}종 · 기대 ${quantity(stats.outputQuantity)}개</span>
       <span>수수료 ${feePercent}%</span>
-      <span>${esc(verificationLabel(row.verification_status))}</span>
+      <span>${esc(recipeSourceLabel(row))}</span>
     </div>
     <div class="recipe-block">
       <h3>필요 재료</h3>
@@ -234,7 +239,7 @@ function detailedRecipeDialog(encoded) {
     </div>
     <div class="source-box">
       <strong>정보 출처</strong>
-      <span>${esc(verificationLabel(row.verification_status))}. 전체 목록은 제작 DB 기준선이며 검증된 공식 변경만 override로 보정합니다.</span>
+      <span>${esc(recipeSourceLabel(row))}. 전체 목록은 제작 DB 기준선이며 검증된 공식 변경만 override로 보정합니다.</span>
       ${sourceUrl ? `<a href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">원본 제작 정보 보기</a>` : ""}
     </div>
     ${!row.price_complete && row.missing_prices?.length ? `<button type="button" class="dialog-primary" onclick="goToPrice('${enc(row.missing_prices[0])}');document.querySelector('#recipeDialog').close()">누락 시세 입력하기</button>` : ""}`;
@@ -246,7 +251,7 @@ function detailedRecipeDialog(encoded) {
     renderCalculationsEnhanced();
     detailedRecipeDialog(encoded);
   }, { once: true });
-  $("#recipeDialog").showModal();
+  if (!$("#recipeDialog").open) $("#recipeDialog").showModal();
 }
 
 renderCalculations = renderCalculationsEnhanced;
@@ -256,10 +261,6 @@ function bindFeatureControls() {
   ["sortMode", "rankLimit", "favoritesOnly"].forEach((id) => {
     const element = $(`#${id}`);
     if (element) element.addEventListener("change", renderCalculationsEnhanced);
-  });
-  ["itemSearch", "profitableOnly"].forEach((id) => {
-    const element = $(`#${id}`);
-    if (element) element.addEventListener(id === "itemSearch" ? "input" : "change", renderCalculationsEnhanced);
   });
   renderInformationNotice();
 }
