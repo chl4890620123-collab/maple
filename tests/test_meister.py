@@ -25,14 +25,22 @@ def test_catalog_has_all_meisterville_categories():
     assert catalog["total_recipe_count"] >= 50
 
     recipe_keys = []
+    has_item_level = False
     for category in catalog["categories"]:
         assert len(category["recipes"]) >= 5
         for recipe in category["recipes"]:
             assert recipe["inputs"]
             assert recipe["outputs"]
             recipe_keys.append(recipe["recipe_key"])
+            if recipe.get("item_level") is not None:
+                assert int(recipe["item_level"]) > 0
+                has_item_level = True
+            for material in recipe["inputs"]:
+                assert float(material.get("quantity", 0)) > 0
             for output in recipe["outputs"]:
+                assert float(output.get("quantity", 0)) > 0
                 assert 0 < float(output.get("probability", 100)) <= 100
+    assert has_item_level, "catalog should preserve item-level metadata from the recipe source"
     assert len(recipe_keys) == len(set(recipe_keys))
 
 
@@ -143,3 +151,17 @@ def test_fixed_shop_endpoint_data_is_complete():
     assert shop["최고급 연마제"]["base_price"] == 50000
     assert shop["최고급 허브오일병"]["base_price"] == 1000
     assert shop["최고급 포션 빈 병"]["base_price"] == 800
+
+
+def test_calculation_api_metadata_keeps_recipe_details():
+    from app.main import meister_calculations
+
+    rows = meister_calculations(fee_rate=0.05, category_key="accessory", q=None, guild_discount=True)
+    assert rows
+    assert any(int(row.get("item_level") or 0) > 0 for row in rows)
+    for row in rows[:20]:
+        assert row["input_type_count"] == len(row["inputs"])
+        assert row["input_total_quantity"] > 0
+        assert row["output_type_count"] == len(row["outputs"])
+        assert row["output_expected_quantity"] > 0
+        assert row["source_label"]
