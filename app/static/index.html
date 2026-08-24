@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#0e1118" />
   <title>Maple Meisterville Analytics</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/features.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -70,17 +71,47 @@
             </label>
             <button id="refresh" class="secondary refresh-button" type="button">다시 계산</button>
           </div>
+
+          <div class="ranking-toolbar">
+            <div>
+              <label for="sortMode">순위 기준</label>
+              <select id="sortMode">
+                <option value="profit_desc">순이익 높은순</option>
+                <option value="margin_desc">마진율 높은순</option>
+                <option value="cost_asc">재료비 낮은순</option>
+                <option value="level_asc">요구 레벨 낮은순</option>
+                <option value="name_asc">이름순</option>
+              </select>
+            </div>
+            <div>
+              <label for="rankLimit">표시 개수</label>
+              <select id="rankLimit">
+                <option value="10">TOP 10</option>
+                <option value="30">TOP 30</option>
+                <option value="100">TOP 100</option>
+                <option value="all" selected>전체</option>
+              </select>
+            </div>
+            <label class="toggle-field favorite-only-toggle">
+              <input id="favoritesOnly" type="checkbox" />
+              <span>찜 목록만 <small id="favoriteCount">0개</small></span>
+            </label>
+          </div>
           <div id="fixedRuleSummary" class="rule-strip">고정 규칙을 확인 중입니다.</div>
         </div>
 
         <div id="summaryCards" class="summary-grid summary-grid-four"></div>
+
+        <div id="sourceNotice" class="source-notice card">
+          <strong>정보 기준 확인 중</strong>
+        </div>
 
         <section class="result-section">
           <div class="section-heading">
             <div>
               <p class="section-kicker">현재 시세 기준</p>
               <h2 id="resultTitle">전체 제작 수익 순위</h2>
-              <p>확률 결과는 기대값으로 계산하고, 시세가 없는 제작법은 순위에서 분리합니다.</p>
+              <p>재료 수량·원가·결과 확률·수수료를 함께 반영하고, 시세가 없는 제작법은 계산 대기로 표시합니다.</p>
             </div>
             <span id="resultCount" class="count-badge">0개</span>
           </div>
@@ -159,7 +190,7 @@
   </div>
 
   <dialog id="recipeDialog">
-    <form method="dialog" class="dialog-card">
+    <form method="dialog" class="dialog-card feature-dialog-card">
       <button class="dialog-close" value="cancel" aria-label="닫기">×</button>
       <div id="recipeDialogBody"></div>
     </form>
@@ -183,5 +214,6 @@
   </dialog>
 
   <script src="/app.js"></script>
+  <script src="/features.js"></script>
 </body>
 </html>
