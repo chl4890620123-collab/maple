@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -21,20 +22,19 @@ class Category:
     key: str
     name: str
     retype: int
+    level_labels: tuple[str, ...]
 
 
 CATEGORIES = (
-    Category("herbalism", "약초채집", 1),
-    Category("mining", "채광", 2),
-    Category("equipment", "장비제작", 3),
-    Category("accessory", "장신구제작", 4),
-    Category("alchemy", "연금술", 5),
+    Category("herbalism", "약초채집", 1, ("약초채집",)),
+    Category("mining", "채광", 2, ("광물채집", "채광")),
+    Category("equipment", "장비제작", 3, ("장비제작", "장비 제작")),
+    Category("accessory", "장신구제작", 4, ("장신구제작", "장신구 제작")),
+    Category("alchemy", "연금술", 5, ("연금술",)),
 )
-
 
 QTY_RE = re.compile(r"(?:x|×)\s*([0-9]+(?:\.[0-9]+)?)", re.I)
 PROB_RE = re.compile(r"\(([0-9]+(?:\.[0-9]+)?)%\)")
-LEVEL_RE = re.compile(r"(?:약초채집|채광|장비제작|장신구제작|연금술)\s*Lv\.\s*([0-9]+)")
 ITEM_LEVEL_PREFIX_RE = re.compile(r"^Lv\.\s*[0-9]+\s+")
 
 
@@ -52,9 +52,16 @@ def parse_probability(text: str) -> float:
     return float(match.group(1)) if match else 100.0
 
 
+def parse_required_level(text: str, category: Category) -> int | None:
+    for label in category.level_labels:
+        match = re.search(rf"{re.escape(label)}\s*Lv\.\s*([0-9]+)", text)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def text_anchor(container: Tag) -> str | None:
-    anchors = container.find_all("a")
-    for anchor in reversed(anchors):
+    for anchor in reversed(container.find_all("a")):
         text = clean_text(anchor.get_text(" ", strip=True))
         if text:
             return text
@@ -65,17 +72,18 @@ def parse_entries(cell: Tag, *, outputs: bool) -> list[dict]:
     entries: list[dict] = []
     blocks = cell.find_all("li")
     if not blocks:
-        blocks = [node for node in cell.find_all(["div", "p"], recursive=False) if clean_text(node.get_text(" ", strip=True))]
+        blocks = [
+            node
+            for node in cell.find_all(["div", "p"], recursive=False)
+            if clean_text(node.get_text(" ", strip=True))
+        ]
 
     for block in blocks:
         name = text_anchor(block)
         text = clean_text(block.get_text(" ", strip=True))
         if not name or not text:
             continue
-        entry = {
-            "name": name,
-            "quantity": parse_quantity(text),
-        }
+        entry = {"name": name, "quantity": parse_quantity(text)}
         if outputs:
             entry["probability"] = parse_probability(text)
         entries.append(entry)
@@ -83,7 +91,6 @@ def parse_entries(cell: Tag, *, outputs: bool) -> list[dict]:
     if entries:
         return entries
 
-    # Fallback for table cells that do not use list elements.
     seen: set[str] = set()
     for anchor in cell.find_all("a"):
         name = clean_text(anchor.get_text(" ", strip=True))
@@ -106,6 +113,17 @@ def find_recipe_table(soup: BeautifulSoup) -> Tag:
     raise RuntimeError("제작법/재료/완성품 테이블을 찾지 못했습니다.")
 
 
+def make_recipe_key(category_key: str, required_level: int | None, inputs: list[dict], outputs: list[dict]) -> str:
+    identity = {
+        "category": category_key,
+        "required_level": required_level,
+        "inputs": inputs,
+        "outputs": outputs,
+    }
+    raw = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"{category_key}-{hashlib.sha256(raw).hexdigest()[:16]}"
+
+
 def parse_category(category: Category) -> dict:
     url = BASE_URL.format(category.retype)
     response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
@@ -115,7 +133,7 @@ def parse_category(category: Category) -> dict:
     soup = BeautifulSoup(response.text, "lxml")
     table = find_recipe_table(soup)
     recipes: list[dict] = []
-    signatures: set[str] = set()
+    seen_keys: set[str] = set()
 
     for row in table.find_all("tr"):
         cells = row.find_all("td", recursive=False)
@@ -128,25 +146,28 @@ def parse_category(category: Category) -> dict:
         if not inputs or not outputs:
             continue
 
-        level_match = LEVEL_RE.search(title_text)
-        required_level = int(level_match.group(1)) if level_match else None
+        required_level = parse_required_level(title_text, category)
         primary_name = outputs[0]["name"]
         display_name = ITEM_LEVEL_PREFIX_RE.sub("", primary_name).strip() or primary_name
-
-        recipe = {
-            "name": display_name,
-            "profession": category.name,
-            "required_level": required_level,
-            "inputs": inputs,
-            "outputs": outputs,
-            "source_url": url,
-            "source_label": "메이플스토리 인벤 제작 DB",
-        }
-        signature = json.dumps(recipe, ensure_ascii=False, sort_keys=True)
-        if signature in signatures:
+        recipe_key = make_recipe_key(category.key, required_level, inputs, outputs)
+        if recipe_key in seen_keys:
             continue
-        signatures.add(signature)
-        recipes.append(recipe)
+        seen_keys.add(recipe_key)
+
+        recipes.append(
+            {
+                "recipe_key": recipe_key,
+                "name": display_name,
+                "category_key": category.key,
+                "profession": category.name,
+                "required_level": required_level,
+                "inputs": inputs,
+                "outputs": outputs,
+                "source_url": url,
+                "source_label": "메이플스토리 인벤 제작 DB",
+                "verification_status": "third_party_baseline",
+            }
+        )
 
     if not recipes:
         raise RuntimeError(f"{category.name} 레시피가 0개로 파싱되었습니다.")
@@ -160,6 +181,26 @@ def parse_category(category: Category) -> dict:
     }
 
 
+def validate_catalog(categories: list[dict]) -> None:
+    expected = {category.key for category in CATEGORIES}
+    actual = {category["key"] for category in categories}
+    if actual != expected:
+        raise RuntimeError(f"카테고리 불일치: expected={sorted(expected)}, actual={sorted(actual)}")
+
+    total = 0
+    for category in categories:
+        count = len(category["recipes"])
+        total += count
+        if count < 5:
+            raise RuntimeError(f"{category['name']} 레시피가 비정상적으로 적습니다: {count}")
+        keys = [recipe["recipe_key"] for recipe in category["recipes"]]
+        if len(keys) != len(set(keys)):
+            raise RuntimeError(f"{category['name']} recipe_key 중복이 있습니다.")
+
+    if total < 50:
+        raise RuntimeError(f"전체 레시피 수가 비정상적으로 적습니다: {total}")
+
+
 def main() -> int:
     categories = []
     total = 0
@@ -169,13 +210,14 @@ def main() -> int:
         total += parsed["recipe_count"]
         print(f"{category.name}: {parsed['recipe_count']} recipes")
 
+    validate_catalog(categories)
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "source_policy": {
-            "catalog": "메이플스토리 인벤 제작 DB",
+            "baseline": "메이플스토리 인벤 제작 DB",
             "official_guide": "https://maplestory.nexon.com/Guide/N23GameInformation/Articles/379",
-            "note": "시세는 별도 가격 테이블에서 관리하며 제작 카탈로그와 분리합니다.",
+            "note": "제3자 제작 DB를 전체 목록의 기준선으로 사용하며, 최신 공식 변경 및 장인/명장 누락은 별도 override 데이터로 보정합니다. 시세 데이터와 제작 카탈로그는 분리합니다.",
         },
         "total_recipe_count": total,
         "categories": categories,
