@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 AuctionFeeRate = Literal[0.05, 0.03]
+RecipeAccessType = Literal["unknown", "permanent", "daily", "one_time"]
 
 
 class PriceUpdate(BaseModel):
@@ -17,6 +18,11 @@ class MarketPriceEntry(BaseModel):
 
 class MarketPriceBulkUpdate(BaseModel):
     prices: list[MarketPriceEntry] = Field(min_length=1, max_length=500)
+
+
+class RecipeStateUpdate(BaseModel):
+    access_type: RecipeAccessType
+    is_owned: bool = False
 
 
 class CraftCreate(BaseModel):
