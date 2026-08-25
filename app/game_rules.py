@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,6 +12,11 @@ ALLOWED_AUCTION_FEE_RATES = (STANDARD_AUCTION_FEE_RATE, PC_ROOM_AUCTION_FEE_RATE
 GUILD_SHOP_DISCOUNT_RATE = 0.04
 PC_ROOM_CRAFT_SUCCESS_BONUS_MAX = 0.10
 DEFAULT_GUILD_DISCOUNT_ENABLED = True
+
+_GUILD_SHOP_DISCOUNT_RATE_CONTEXT: ContextVar[float] = ContextVar(
+    "maple_guild_shop_discount_rate",
+    default=GUILD_SHOP_DISCOUNT_RATE,
+)
 
 FIXED_SHOP_PATH = Path(__file__).resolve().parent.parent / "data" / "fixed_shop_prices.json"
 
@@ -35,6 +41,25 @@ def fixed_shop_item(item_name: str) -> dict | None:
     return fixed_shop_index().get(item_name)
 
 
+def validate_guild_shop_discount_rate(value: float) -> float:
+    value = float(value)
+    if value < 0.0 or value > 1.0:
+        raise ValueError("길드 상점 할인율은 0% 이상 100% 이하여야 합니다.")
+    return value
+
+
+def current_guild_shop_discount_rate() -> float:
+    return validate_guild_shop_discount_rate(_GUILD_SHOP_DISCOUNT_RATE_CONTEXT.get())
+
+
+def set_guild_shop_discount_rate(value: float):
+    return _GUILD_SHOP_DISCOUNT_RATE_CONTEXT.set(validate_guild_shop_discount_rate(value))
+
+
+def reset_guild_shop_discount_rate(token) -> None:
+    _GUILD_SHOP_DISCOUNT_RATE_CONTEXT.reset(token)
+
+
 def shop_purchase_price(item_name: str, guild_discount: bool = DEFAULT_GUILD_DISCOUNT_ENABLED) -> dict | None:
     item = fixed_shop_item(item_name)
     if item is None:
@@ -43,14 +68,15 @@ def shop_purchase_price(item_name: str, guild_discount: bool = DEFAULT_GUILD_DIS
     base_price = int(item["base_price"])
     eligible = bool(item.get("guild_discount_eligible", False))
     apply_discount = bool(guild_discount and eligible)
-    effective_price = int(base_price * (1 - GUILD_SHOP_DISCOUNT_RATE)) if apply_discount else base_price
+    discount_rate = current_guild_shop_discount_rate() if apply_discount else 0.0
+    effective_price = int(base_price * (1 - discount_rate)) if apply_discount else base_price
     return {
         "item_name": item_name,
         "base_price": base_price,
         "effective_price": effective_price,
         "guild_discount_eligible": eligible,
         "guild_discount_applied": apply_discount,
-        "guild_discount_rate": GUILD_SHOP_DISCOUNT_RATE if apply_discount else 0.0,
+        "guild_discount_rate": discount_rate,
         "vendor": item.get("vendor", "마이스터빌 재료 상인"),
         "source_label": item.get("source_label"),
         "source_url": item.get("source_url"),

@@ -68,8 +68,14 @@ def meister_categories():
 
 
 @app.get("/api/meister/fixed-shop-prices")
-def meister_fixed_shop_prices():
-    return meister.fixed_shop_items()
+def meister_fixed_shop_prices(
+    guild_discount_rate: float = Query(default=game_rules.GUILD_SHOP_DISCOUNT_RATE, ge=0.0, le=1.0),
+):
+    token = game_rules.set_guild_shop_discount_rate(guild_discount_rate)
+    try:
+        return meister.fixed_shop_items()
+    finally:
+        game_rules.reset_guild_shop_discount_rate(token)
 
 
 @app.get("/api/meister/calculations")
@@ -78,23 +84,29 @@ def meister_calculations(
     category_key: str | None = Query(default=None),
     q: str | None = Query(default=None, max_length=100),
     guild_discount: bool = Query(default=game_rules.DEFAULT_GUILD_DISCOUNT_ENABLED),
+    guild_discount_rate: float = Query(default=game_rules.GUILD_SHOP_DISCOUNT_RATE, ge=0.0, le=1.0),
 ):
+    token = game_rules.set_guild_shop_discount_rate(guild_discount_rate)
     try:
         rows = meister.calculations(fee_rate, category_key, q, guild_discount)
-        metadata = recipe_metadata_index()
-        for row in rows:
-            info = metadata.get(row["recipe_key"], {})
-            row["item_level"] = info.get("item_level")
-            row["source_label"] = info.get("source_label", "메이플스토리 인벤 제작 DB")
-            row["input_type_count"] = len(row.get("inputs", []))
-            row["input_total_quantity"] = sum(float(item.get("quantity", 0)) for item in row.get("inputs", []))
-            row["output_type_count"] = len(row.get("outputs", []))
-            row["output_expected_quantity"] = sum(
-                float(item.get("expected_quantity", 0)) for item in row.get("outputs", [])
-            )
-        return rows
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        game_rules.reset_guild_shop_discount_rate(token)
+
+    metadata = recipe_metadata_index()
+    for row in rows:
+        info = metadata.get(row["recipe_key"], {})
+        row["item_level"] = info.get("item_level")
+        row["source_label"] = info.get("source_label", "메이플스토리 인벤 제작 DB")
+        row["input_type_count"] = len(row.get("inputs", []))
+        row["input_total_quantity"] = sum(float(item.get("quantity", 0)) for item in row.get("inputs", []))
+        row["output_type_count"] = len(row.get("outputs", []))
+        row["output_expected_quantity"] = sum(
+            float(item.get("expected_quantity", 0)) for item in row.get("outputs", [])
+        )
+        row["guild_shop_discount_rate"] = guild_discount_rate
+    return rows
 
 
 @app.get("/api/market-prices")
