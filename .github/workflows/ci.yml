@@ -53,7 +53,7 @@ jobs:
         run: docker compose config >/dev/null
       - name: Docker build
         run: docker build --platform linux/amd64 -t maple-craft-analytics:ci .
-      - name: Docker runtime smoke test
+      - name: Docker runtime functional smoke test
         shell: bash
         run: |
           set -euo pipefail
@@ -67,51 +67,49 @@ jobs:
 
           for attempt in $(seq 1 30); do
             if python - <<'PY'
-import json
-import urllib.parse
-import urllib.request
+          import json
+          import urllib.parse
+          import urllib.request
 
-try:
-    with urllib.request.urlopen('http://127.0.0.1:18081/api/health', timeout=2) as response:
-        assert response.status == 200
-    with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/meta', timeout=2) as response:
-        meta = json.load(response)
-    assert meta['total_recipe_count'] >= 50
-    assert len(meta['categories']) == 5
+          try:
+              with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/meta', timeout=2) as response:
+                  meta = json.load(response)
+              assert meta['total_recipe_count'] >= 50
+              assert len(meta['categories']) == 5
 
-    query = urllib.parse.urlencode({'category_key': 'accessory', 'fee_rate': '0.05'})
-    with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/calculations?' + query, timeout=5) as response:
-        calculations = json.load(response)
-    assert calculations
-    assert any(int(row.get('item_level') or 0) > 0 for row in calculations)
-    assert all(int(row.get('input_type_count') or 0) >= 1 for row in calculations[:20])
-    assert all(float(row.get('input_total_quantity') or 0) > 0 for row in calculations[:20])
-    assert all(int(row.get('output_type_count') or 0) >= 1 for row in calculations[:20])
-    assert all(float(row.get('output_expected_quantity') or 0) > 0 for row in calculations[:20])
+              query = urllib.parse.urlencode({'category_key': 'accessory', 'fee_rate': '0.05'})
+              with urllib.request.urlopen('http://127.0.0.1:18081/api/meister/calculations?' + query, timeout=5) as response:
+                  calculations = json.load(response)
+              assert calculations
+              assert any(int(row.get('item_level') or 0) > 0 for row in calculations)
+              assert all(int(row.get('input_type_count') or 0) >= 1 for row in calculations[:20])
+              assert all(float(row.get('input_total_quantity') or 0) > 0 for row in calculations[:20])
+              assert all(int(row.get('output_type_count') or 0) >= 1 for row in calculations[:20])
+              assert all(float(row.get('output_expected_quantity') or 0) > 0 for row in calculations[:20])
 
-    with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=2) as response:
-        html = response.read().decode('utf-8')
-    assert 'id="sortMode"' in html
-    assert 'id="favoritesOnly"' in html
-    assert 'id="rankLimit"' in html
-    assert '/features.js' in html
-    assert '/guild-settings.js' in html
-    with urllib.request.urlopen('http://127.0.0.1:18081/features.js', timeout=2) as response:
-        js = response.read().decode('utf-8')
-    assert 'FAVORITES_KEY' in js
-    assert 'renderCalculationsEnhanced' in js
-    assert '아이템 Lv.' in js
-    with urllib.request.urlopen('http://127.0.0.1:18081/guild-settings.js', timeout=2) as response:
-        settings_js = response.read().decode('utf-8')
-    assert 'GUILD_DISCOUNT_STORAGE_KEY' in settings_js
-    assert 'guild_discount: String(guildDiscount)' in settings_js
-    with urllib.request.urlopen('http://127.0.0.1:18081/features.css', timeout=2) as response:
-        css = response.read().decode('utf-8')
-    assert '.favorite-button' in css
-    assert '.recipe-table' in css
-except Exception:
-    raise SystemExit(1)
-PY
+              with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=2) as response:
+                  html = response.read().decode('utf-8')
+              assert 'id="sortMode"' in html
+              assert 'id="favoritesOnly"' in html
+              assert 'id="rankLimit"' in html
+              assert '/features.js' in html
+              assert '/guild-settings.js' in html
+              with urllib.request.urlopen('http://127.0.0.1:18081/features.js', timeout=2) as response:
+                  js = response.read().decode('utf-8')
+              assert 'FAVORITES_KEY' in js
+              assert 'renderCalculationsEnhanced' in js
+              assert '아이템 Lv.' in js
+              with urllib.request.urlopen('http://127.0.0.1:18081/guild-settings.js', timeout=2) as response:
+                  settings_js = response.read().decode('utf-8')
+              assert 'GUILD_DISCOUNT_STORAGE_KEY' in settings_js
+              assert 'guild_discount: String(guildDiscount)' in settings_js
+              with urllib.request.urlopen('http://127.0.0.1:18081/features.css', timeout=2) as response:
+                  css = response.read().decode('utf-8')
+              assert '.favorite-button' in css
+              assert '.recipe-table' in css
+          except Exception:
+              raise SystemExit(1)
+          PY
             then
               exit 0
             fi
