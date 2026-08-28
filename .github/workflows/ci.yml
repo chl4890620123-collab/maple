@@ -98,7 +98,8 @@ jobs:
                   js = response.read().decode('utf-8')
               assert 'FAVORITES_KEY' in js
               assert 'renderCalculationsEnhanced' in js
-              assert '아이템 Lv.' in js
+              assert '상세/설정' in js
+              assert '가격 바로 입력' in js
               with urllib.request.urlopen('http://127.0.0.1:18081/guild-settings.js', timeout=2) as response:
                   settings_js = response.read().decode('utf-8')
               assert 'GUILD_DISCOUNT_STORAGE_KEY' in settings_js
