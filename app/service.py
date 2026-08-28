@@ -5,6 +5,59 @@ from . import game_rules
 from .db import connection, now_iso
 
 
+def _market_price_snapshot():
+    """Return current unified prices when the Meister market table is available.
+
+    The legacy items/materials tables remain for compatibility, but the current
+    Meister UI stores both material and product prices in market_prices.
+    """
+    try:
+        with connection() as conn:
+            rows = conn.execute(
+                "SELECT item_name,current_price,source FROM market_prices"
+            ).fetchall()
+        return {
+            row["item_name"]: int(row["current_price"])
+            for row in rows
+            if row["source"] != "catalog_unpriced"
+        }
+    except Exception:
+        return {}
+
+
+def _sync_market_price(item_name: str, price: int, source: str) -> None:
+    """Keep a legacy price edit visible in the current Meister product flow."""
+    if game_rules.fixed_shop_item(item_name) is not None:
+        return
+    try:
+        from . import meister
+
+        if item_name not in meister.catalog_item_index():
+            return
+        ts = now_iso()
+        with connection() as conn:
+            meister._create_market_tables(conn)
+            row = conn.execute(
+                "SELECT item_name FROM market_prices WHERE item_name=?", (item_name,)
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    "INSERT INTO market_prices(item_name,current_price,source,updated_at) VALUES (?,?,?,?)",
+                    (item_name, int(price), source, ts),
+                )
+            else:
+                conn.execute(
+                    "UPDATE market_prices SET current_price=?,source=?,updated_at=? WHERE item_name=?",
+                    (int(price), source, ts, item_name),
+                )
+            conn.execute(
+                "INSERT INTO market_price_history(item_name,price,source,recorded_at) VALUES (?,?,?,?)",
+                (item_name, int(price), source, ts),
+            )
+    except Exception as exc:
+        raise RuntimeError(f"통합 시세 저장에 실패했습니다: {item_name}") from exc
+
+
 def list_materials():
     with connection() as conn:
         return [dict(r) for r in conn.execute(
@@ -15,23 +68,27 @@ def list_materials():
 def update_material_price(material_id: int, price: int):
     ts = now_iso()
     with connection() as conn:
-        row = conn.execute("SELECT id FROM materials WHERE id=?", (material_id,)).fetchone()
+        row = conn.execute("SELECT id,name FROM materials WHERE id=?", (material_id,)).fetchone()
         if not row:
             return None
+        if game_rules.fixed_shop_item(row["name"]) is not None:
+            raise ValueError("마이스터빌 상점 고정가는 직접 수정할 수 없습니다.")
         conn.execute("UPDATE materials SET current_price=?, updated_at=? WHERE id=?", (price, ts, material_id))
         conn.execute(
             "INSERT INTO price_history(entity_type, entity_id, price, recorded_at) VALUES ('material', ?, ?, ?)",
             (material_id, price, ts),
         )
-        return dict(conn.execute(
+        result = dict(conn.execute(
             "SELECT id, name, current_price, updated_at FROM materials WHERE id=?", (material_id,)
         ).fetchone())
+    _sync_market_price(result["name"], price, "legacy_material")
+    return result
 
 
 def update_item_sale_price(item_id: int, price: int):
     ts = now_iso()
     with connection() as conn:
-        row = conn.execute("SELECT id FROM items WHERE id=?", (item_id,)).fetchone()
+        row = conn.execute("SELECT id,name FROM items WHERE id=?", (item_id,)).fetchone()
         if not row:
             return None
         conn.execute("UPDATE items SET current_sale_price=?, updated_at=? WHERE id=?", (price, ts, item_id))
@@ -39,13 +96,16 @@ def update_item_sale_price(item_id: int, price: int):
             "INSERT INTO price_history(entity_type, entity_id, price, recorded_at) VALUES ('item', ?, ?, ?)",
             (item_id, price, ts),
         )
-        return dict(conn.execute(
+        result = dict(conn.execute(
             "SELECT id, name, current_sale_price, updated_at FROM items WHERE id=?", (item_id,)
         ).fetchone())
+    _sync_market_price(result["name"], price, "legacy_item")
+    return result
 
 
 def calculations(fee_rate: float):
     fee_rate = game_rules.validate_auction_fee_rate(fee_rate)
+    market_prices = _market_price_snapshot()
     with connection() as conn:
         items = [dict(r) for r in conn.execute(
             """SELECT id, name, profession, required_rank, output_quantity, current_sale_price,
@@ -61,11 +121,15 @@ def calculations(fee_rate: float):
         )]
 
     grouped = defaultdict(list)
-    for c in components:
-        grouped[c["item_id"]].append(c)
+    for component in components:
+        if component["material_name"] in market_prices and game_rules.fixed_shop_item(component["material_name"]) is None:
+            component["current_price"] = market_prices[component["material_name"]]
+        grouped[component["item_id"]].append(component)
 
     result = []
     for item in items:
+        if item["name"] in market_prices:
+            item["current_sale_price"] = market_prices[item["name"]]
         recipe_total = sum(c["quantity"] * c["current_price"] for c in grouped[item["id"]])
         batch_cost = recipe_total + item["extra_cost"]
         output_qty = float(item["output_quantity"])
