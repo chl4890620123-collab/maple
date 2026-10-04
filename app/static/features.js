@@ -59,6 +59,14 @@ function profitSort(a, b) {
   return Number(b.expected_profit ?? -Infinity) - Number(a.expected_profit ?? -Infinity) || String(a.name).localeCompare(String(b.name), "ko");
 }
 
+function learnedProfit(row) {
+  return Number(row.learning?.adjusted_expected_profit ?? row.expected_profit ?? -Infinity);
+}
+
+function learnedProfitSort(a, b) {
+  return learnedProfit(b) - learnedProfit(a) || profitSort(a, b);
+}
+
 function ensureRecommendationPanel() {
   let panel = document.querySelector("#quickRecommendation");
   if (panel) return panel;
@@ -73,6 +81,13 @@ function ensureRecommendationPanel() {
 
 function recommendationCard(row, index, stateLabel) {
   const stats = recipeStats(row);
+  const learning = row.learning || {};
+  const learned = learning.adjusted_expected_profit ?? row.expected_profit;
+  const learningHint = learning.state === "learned"
+    ? `경험 ${learning.sample_count}건 · 신뢰도 ${Number(learning.confidence_score || 0).toFixed(0)}%`
+    : learning.state === "warming"
+      ? "경험 데이터 학습 중"
+      : "판매 기록을 모으면 자동 보정";
   return `
     <article class="quick-pick">
       <div class="quick-rank">${index + 1}</div>
@@ -83,11 +98,11 @@ function recommendationCard(row, index, stateLabel) {
           <span class="badge ${stateLabel === "지금 제작 가능" ? "fixed" : "warning"}">${stateLabel}</span>
           ${stats.fixedShopInputs ? `<span class="badge fixed">마빌 고정 ${stats.fixedShopInputs}종</span>` : ""}
         </div>
-        <small>재료비 ${money(row.input_cost)} · 수수료 후 회수 ${money(row.net_expected)}</small>
+        <small>재료비 ${money(row.input_cost)} · ${esc(learningHint)}</small>
       </div>
       <div class="quick-profit">
-        <span>예상 순이익</span>
-        <strong class="positive">+${money(row.expected_profit)}</strong>
+        <span>경험보정 예상</span>
+        <strong class="positive">+${money(learned)}</strong>
       </div>
       <button type="button" class="tiny" onclick="showRecipe('${enc(row.recipe_key)}')">자세히 보기</button>
     </article>`;
@@ -98,7 +113,7 @@ function renderQuickRecommendations() {
   if (!panel) return;
   const profitable = state.calculations
     .filter((row) => row.price_complete && Number(row.expected_profit) > 0)
-    .sort(profitSort);
+    .sort(learnedProfitSort);
 
   const available = profitable.filter((row) => recommendationState(row) === "available");
   const unknown = profitable.filter((row) => recommendationState(row) === "unknown");
@@ -141,6 +156,7 @@ function selectedSortLabel() {
 
 function compareRows(a, b, mode) {
   const value = (input, fallback) => input === null || input === undefined || Number.isNaN(Number(input)) ? fallback : Number(input);
+  if (mode === "learned_desc") return learnedProfitSort(a, b);
   if (mode === "margin_desc") return value(b.margin_rate, -Infinity) - value(a.margin_rate, -Infinity) || profitSort(a, b);
   if (mode === "cost_asc") return value(a.input_cost, Infinity) - value(b.input_cost, Infinity) || profitSort(a, b);
   if (mode === "level_asc") return value(a.required_level, Infinity) - value(b.required_level, Infinity) || profitSort(a, b);
@@ -152,7 +168,7 @@ function enhancedFilteredCalculations() {
   const query = $("#itemSearch").value.trim().toLowerCase();
   const profitableOnly = $("#profitableOnly").checked;
   const favoritesOnly = Boolean($("#favoritesOnly")?.checked);
-  const sortMode = $("#sortMode")?.value || "profit_desc";
+  const sortMode = $("#sortMode")?.value || "learned_desc";
   const limitValue = $("#rankLimit")?.value || "all";
   let rows = state.calculations.filter((row) => {
     if (query && !row.name.toLowerCase().includes(query)) return false;
@@ -314,7 +330,8 @@ function detailedRecipeDialog(encoded) {
     <div class="recipe-block"><h3>레시피 사용 상태</h3><p class="muted">확인한 상태만 저장하세요. 일일은 오늘만, 영구는 계속, 1회는 사용 처리 전까지만 제작 가능으로 봅니다.</p><div class="meister-filter-grid"><div class="search-field"><label for="recipeAccessType">사용 형태</label><select id="recipeAccessType"><option value="unknown">확인 필요</option><option value="permanent">영구</option><option value="daily">일일</option><option value="one_time">1회</option></select></div><label class="toggle-field"><input id="recipeOwned" type="checkbox"><span>현재 보유/사용 가능</span></label><button id="saveRecipeAccess" type="button">상태 저장</button>${access.access_type === "one_time" && access.available ? '<button id="consumeRecipe" type="button" class="secondary">1회 사용 처리</button>' : ""}</div></div>
     <div class="recipe-block"><h3>필요 재료</h3><p class="muted">아이템 이름/가격을 누르면 이 자리에서 바로 수정할 수 있습니다. 마빌 상점 고정가는 읽기 전용입니다.</p><div class="table-scroll"><table class="recipe-table"><thead><tr><th>재료</th><th>수량</th><th>개당 가격</th><th>합계</th></tr></thead><tbody>${inputs}</tbody></table></div></div>
     <div class="recipe-block"><h3>제작 결과</h3><div class="table-scroll"><table class="recipe-table"><thead><tr><th>결과물</th><th>수량</th><th>시세</th></tr></thead><tbody>${outputs}</tbody></table></div></div>
-    <div class="recipe-totals"><div><span>재료비</span><strong>${row.input_cost != null ? money(row.input_cost) : "-"}</strong></div><div><span>수수료 후 회수</span><strong>${row.net_expected != null ? money(row.net_expected) : "-"}</strong></div><div><span>예상 순이익</span><strong class="${row.expected_profit >= 0 ? "positive" : "negative"}">${row.expected_profit != null ? `${row.expected_profit >= 0 ? "+" : ""}${money(row.expected_profit)}` : "가격 입력 필요"}</strong></div></div>`;
+    <div class="recipe-totals"><div><span>재료비</span><strong>${row.input_cost != null ? money(row.input_cost) : "-"}</strong></div><div><span>수수료 후 회수</span><strong>${row.net_expected != null ? money(row.net_expected) : "-"}</strong></div><div><span>예상 순이익</span><strong class="${row.expected_profit >= 0 ? "positive" : "negative"}">${row.expected_profit != null ? `${row.expected_profit >= 0 ? "+" : ""}${money(row.expected_profit)}` : "가격 입력 필요"}</strong></div></div>
+    <div class="recipe-block"><h3>경험 학습 추천</h3><p class="muted">${esc(row.learning?.explanation || "실제 판매 기록이 쌓이면 추천값을 자동 보정합니다.")}</p><div class="recipe-totals"><div><span>경험보정 예상</span><strong class="${Number(row.learning?.adjusted_expected_profit ?? row.expected_profit) >= 0 ? "positive" : "negative"}">${row.learning?.adjusted_expected_profit != null ? `${Number(row.learning.adjusted_expected_profit) >= 0 ? "+" : ""}${money(row.learning.adjusted_expected_profit)}` : "-"}</strong></div><div><span>학습 표본</span><strong>${Number(row.learning?.sample_count || 0)}건</strong></div><div><span>신뢰도</span><strong>${Number(row.learning?.confidence_score || 0).toFixed(0)}%</strong></div></div></div>`;
 
   $("#recipeAccessType").value = access.access_type || "unknown";
   $("#recipeOwned").checked = Boolean(access.is_owned);

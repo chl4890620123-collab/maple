@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import game_rules, meister, service
+from . import game_rules, learning, meister, service
 from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
 from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, RecipeStateUpdate, SaleCreate
@@ -54,7 +54,7 @@ def meister_calculations(fee_rate:float=Query(default=DEFAULT_FEE_RATE),category
     metadata=recipe_metadata_index()
     for row in rows:
         info=metadata.get(row["recipe_key"],{}); row["item_level"]=info.get("item_level"); row["source_label"]=info.get("source_label","메이플스토리 인벤 제작 DB"); row["input_type_count"]=len(row.get("inputs",[])); row["input_total_quantity"]=sum(float(i.get("quantity",0)) for i in row.get("inputs",[])); row["output_type_count"]=len(row.get("outputs",[])); row["output_expected_quantity"]=sum(float(i.get("expected_quantity",0)) for i in row.get("outputs",[])); row["guild_shop_discount_rate"]=guild_discount_rate
-    return rows
+    return learning.apply_learning(rows)
 
 @app.patch("/api/meister/recipes/{recipe_key}/state", dependencies=[Depends(require_admin)])
 def patch_recipe_state(recipe_key:str, body:RecipeStateUpdate):
