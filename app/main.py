@@ -4,10 +4,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import game_rules, learning, meister, service
+from . import game_rules, learning, meister, meister_history, service
 from .config import ADMIN_TOKEN, CORS_ORIGINS, DEFAULT_FEE_RATE
 from .db import init_db
-from .schemas import CraftCreate, MarketPriceBulkUpdate, PriceUpdate, RecipeStateUpdate, SaleCreate
+from .schemas import CraftCreate, MarketPriceBulkUpdate, MeisterCraftCreate, MeisterSaleCreate, PriceUpdate, RecipeStateUpdate, SaleCreate
 
 app = FastAPI(title="Maple Craft Analytics", version="0.5.0")
 
@@ -55,6 +55,44 @@ def meister_calculations(fee_rate:float=Query(default=DEFAULT_FEE_RATE),category
     for row in rows:
         info=metadata.get(row["recipe_key"],{}); row["item_level"]=info.get("item_level"); row["source_label"]=info.get("source_label","메이플스토리 인벤 제작 DB"); row["input_type_count"]=len(row.get("inputs",[])); row["input_total_quantity"]=sum(float(i.get("quantity",0)) for i in row.get("inputs",[])); row["output_type_count"]=len(row.get("outputs",[])); row["output_expected_quantity"]=sum(float(i.get("expected_quantity",0)) for i in row.get("outputs",[])); row["guild_shop_discount_rate"]=guild_discount_rate
     return learning.apply_learning(rows)
+
+@app.post("/api/meister/crafts", dependencies=[Depends(require_admin)])
+def post_meister_craft(body: MeisterCraftCreate):
+    token = game_rules.set_guild_shop_discount_rate(body.guild_discount_rate)
+    try:
+        rows = meister.calculations(body.fee_rate, guild_discount=body.guild_discount)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        game_rules.reset_guild_shop_discount_rate(token)
+
+    learned = learning.apply_learning(rows)
+    row = next((item for item in learned if item["recipe_key"] == body.recipe_key), None)
+    if row is None:
+        raise HTTPException(status_code=404, detail="레시피를 찾을 수 없습니다.")
+    try:
+        return meister_history.record_craft(row, body.quantity, body.rank_position, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/meister/crafts")
+def get_meister_crafts(limit: int = Query(default=50, ge=1, le=200)):
+    return meister_history.recent_crafts(limit)
+
+
+@app.post("/api/meister/crafts/{craft_id}/sale", dependencies=[Depends(require_admin)])
+def post_meister_sale(craft_id: int, body: MeisterSaleCreate):
+    try:
+        return meister_history.record_sale(craft_id, body.gross_sale_amount, body.fee_rate, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/meister/learning/backtest")
+def meister_learning_backtest(days: int = Query(default=180, ge=7, le=3650)):
+    return learning.backtest(days)
+
 
 @app.patch("/api/meister/recipes/{recipe_key}/state", dependencies=[Depends(require_admin)])
 def patch_recipe_state(recipe_key:str, body:RecipeStateUpdate):
