@@ -331,12 +331,13 @@ function detailedRecipeDialog(encoded) {
     <div class="recipe-block"><h3>필요 재료</h3><p class="muted">아이템 이름/가격을 누르면 이 자리에서 바로 수정할 수 있습니다. 마빌 상점 고정가는 읽기 전용입니다.</p><div class="table-scroll"><table class="recipe-table"><thead><tr><th>재료</th><th>수량</th><th>개당 가격</th><th>합계</th></tr></thead><tbody>${inputs}</tbody></table></div></div>
     <div class="recipe-block"><h3>제작 결과</h3><div class="table-scroll"><table class="recipe-table"><thead><tr><th>결과물</th><th>수량</th><th>시세</th></tr></thead><tbody>${outputs}</tbody></table></div></div>
     <div class="recipe-totals"><div><span>재료비</span><strong>${row.input_cost != null ? money(row.input_cost) : "-"}</strong></div><div><span>수수료 후 회수</span><strong>${row.net_expected != null ? money(row.net_expected) : "-"}</strong></div><div><span>예상 순이익</span><strong class="${row.expected_profit >= 0 ? "positive" : "negative"}">${row.expected_profit != null ? `${row.expected_profit >= 0 ? "+" : ""}${money(row.expected_profit)}` : "가격 입력 필요"}</strong></div></div>
-    <div class="recipe-block"><h3>경험 학습 추천</h3><p class="muted">${esc(row.learning?.explanation || "실제 판매 기록이 쌓이면 추천값을 자동 보정합니다.")}</p><div class="recipe-totals"><div><span>경험보정 예상</span><strong class="${Number(row.learning?.adjusted_expected_profit ?? row.expected_profit) >= 0 ? "positive" : "negative"}">${row.learning?.adjusted_expected_profit != null ? `${Number(row.learning.adjusted_expected_profit) >= 0 ? "+" : ""}${money(row.learning.adjusted_expected_profit)}` : "-"}</strong></div><div><span>학습 표본</span><strong>${Number(row.learning?.sample_count || 0)}건</strong></div><div><span>신뢰도</span><strong>${Number(row.learning?.confidence_score || 0).toFixed(0)}%</strong></div></div></div>`;
+    <div class="recipe-block"><h3>경험 학습 추천</h3><p class="muted">${esc(row.learning?.explanation || "실제 판매 기록이 쌓이면 추천값을 자동 보정합니다.")}</p><div class="recipe-totals"><div><span>경험보정 예상</span><strong class="${Number(row.learning?.adjusted_expected_profit ?? row.expected_profit) >= 0 ? "positive" : "negative"}">${row.learning?.adjusted_expected_profit != null ? `${Number(row.learning.adjusted_expected_profit) >= 0 ? "+" : ""}${money(row.learning.adjusted_expected_profit)}` : "-"}</strong></div><div><span>학습 표본</span><strong>${Number(row.learning?.sample_count || 0)}건</strong></div><div><span>신뢰도</span><strong>${Number(row.learning?.confidence_score || 0).toFixed(0)}%</strong></div></div><div class="dialog-actions"><button id="startLearningCraft" type="button" ${row.price_complete ? "" : "disabled"}>이 추천으로 제작 시작</button></div></div>`;
 
   $("#recipeAccessType").value = access.access_type || "unknown";
   $("#recipeOwned").checked = Boolean(access.is_owned);
   $("#saveRecipeAccess").onclick = () => saveRecipeAccess(row);
   if ($("#consumeRecipe")) $("#consumeRecipe").onclick = () => consumeRecipe(row);
+  if ($("#startLearningCraft")) $("#startLearningCraft").onclick = () => startLearningCraft(row);
   bindInlinePriceEditors();
   if (!$("#recipeDialog").open) $("#recipeDialog").showModal();
 }
@@ -361,3 +362,137 @@ const featureReadyTimer = setInterval(() => {
   }
 }, 100);
 setTimeout(() => clearInterval(featureReadyTimer), 10000);
+
+
+async function startLearningCraft(row) {
+  if (!row?.price_complete) return toast("시세가 완성된 제작만 기록할 수 있습니다.");
+  if (state.writeProtected && !token()) return requestAdmin();
+
+  const raw = prompt("이 레시피를 몇 번 제작할까요?", "1");
+  if (raw === null) return;
+  const quantityValue = Number(String(raw).replaceAll(",", "").trim());
+  if (!Number.isFinite(quantityValue) || quantityValue <= 0) return toast("제작 횟수를 0보다 큰 숫자로 입력하세요.");
+
+  const rankPosition = Math.max(1, state.calculations.findIndex((item) => item.recipe_key === row.recipe_key) + 1);
+  try {
+    const craft = await api("/api/meister/crafts", {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({
+        recipe_key: row.recipe_key,
+        quantity: quantityValue,
+        fee_rate: state.feeRate,
+        guild_discount: typeof guildDiscountEnabled === "function" ? guildDiscountEnabled() : true,
+        guild_discount_rate: typeof guildDiscountRate === "function" ? guildDiscountRate() : 0.04,
+        rank_position: rankPosition,
+      }),
+    });
+    toast(`${row.name} 제작 기록 #${craft.id}을 시작했습니다.`);
+    if ($("#recipeDialog")?.open) $("#recipeDialog").close();
+    await loadCalculations();
+  } catch (error) {
+    if (error.status === 401) return requestAdmin();
+    toast(error.message);
+  }
+}
+
+function ensureLearningRecordsPanel() {
+  let panel = document.querySelector("#meisterLearningRecords");
+  if (panel) return panel;
+  const records = document.querySelector("#records");
+  if (!records) return null;
+  panel = document.createElement("section");
+  panel.id = "meisterLearningRecords";
+  panel.className = "card";
+  const legacy = records.querySelector(".legacy-note");
+  if (legacy) records.insertBefore(panel, legacy);
+  else records.prepend(panel);
+  return panel;
+}
+
+function learningPolicyLabel(backtest) {
+  if (!backtest || backtest.state === "collecting") return "백테스트 데이터 수집 중";
+  if (backtest.state === "observing") return `후보식 관찰 중 · ${backtest.sample_count}건`;
+  if (backtest.state === "promoted") return `후보식 유지 · 오차 ${Number(backtest.improvement_pct || 0).toFixed(1)}% 개선`;
+  return "후보식 자동 롤백 · 원본 계산 사용";
+}
+
+async function completeLearningSale(craft) {
+  if (state.writeProtected && !token()) return requestAdmin();
+  const raw = prompt(`${craft.recipe_name}의 실제 총 판매대금을 입력하세요. (수수료 차감 전)`, "");
+  if (raw === null) return;
+  const gross = Number(String(raw).replaceAll(",", "").trim());
+  if (!Number.isFinite(gross) || gross < 0) return toast("총 판매대금을 0 이상의 숫자로 입력하세요.");
+
+  try {
+    const sale = await api(`/api/meister/crafts/${craft.id}/sale`, {
+      method: "POST",
+      headers: headers(true),
+      body: JSON.stringify({ gross_sale_amount: gross, fee_rate: state.feeRate }),
+    });
+    toast(`판매 완료 · 실현수익 ${sale.realized_profit >= 0 ? "+" : ""}${money(sale.realized_profit)} 메소`);
+    await Promise.all([loadCalculations(), loadLearningRecords()]);
+  } catch (error) {
+    if (error.status === 401) return requestAdmin();
+    toast(error.message);
+  }
+}
+
+async function loadLearningRecords() {
+  const panel = ensureLearningRecordsPanel();
+  if (!panel) return;
+  try {
+    const [crafts, backtest] = await Promise.all([
+      api("/api/meister/crafts?limit=30"),
+      api("/api/meister/learning/backtest?days=180"),
+    ]);
+    const open = crafts.filter((craft) => !craft.sold);
+    const completed = crafts.filter((craft) => craft.sold);
+    panel.innerHTML = `
+      <div class="panel-title">
+        <div>
+          <p class="section-kicker">SELF-IMPROVING LOOP</p>
+          <h3>학습용 제작·판매 기록</h3>
+          <p>추천 당시 값을 고정하고 실제 판매 결과·판매 시간을 비교해 다음 추천에 반영합니다.</p>
+        </div>
+        <span class="count-badge">${esc(learningPolicyLabel(backtest))}</span>
+      </div>
+      <div class="recipe-totals">
+        <div><span>완료 표본</span><strong>${Number(backtest.sample_count || 0)}건</strong></div>
+        <div><span>원본 MAE</span><strong>${backtest.raw_mae == null ? "-" : money(backtest.raw_mae)}</strong></div>
+        <div><span>후보 MAE</span><strong>${backtest.candidate_mae == null ? "-" : money(backtest.candidate_mae)}</strong></div>
+      </div>
+      <div class="records-grid">
+        <div class="record-column">
+          <div class="panel-title"><div><h3>판매 대기</h3><p>실제 판매가 끝나면 총 판매대금을 입력하세요.</p></div><span class="count-badge">${open.length}개</span></div>
+          <div class="record-list">${open.map((craft) => `
+            <div class="record">
+              <div class="record-title"><h3>${esc(craft.recipe_name)} · ${quantity(craft.quantity)}회</h3><span class="badge">학습 대기</span></div>
+              <p>투입 ${money(craft.input_cost_snapshot)} · 후보 예상 ${craft.candidate_expected_profit_snapshot >= 0 ? "+" : ""}${money(craft.candidate_expected_profit_snapshot)}</p>
+              <div class="record-actions"><button class="tiny" data-learning-sale="${craft.id}">판매 완료 기록</button></div>
+            </div>`).join("") || '<p class="muted">판매 대기 중인 제작이 없습니다.</p>'}</div>
+        </div>
+        <div class="record-column">
+          <div class="panel-title"><div><h3>최근 학습 완료</h3><p>실현수익과 판매시간이 추천에 반영됩니다.</p></div><span class="count-badge">${completed.length}개</span></div>
+          <div class="record-list">${completed.slice(0, 10).map((craft) => `
+            <div class="record">
+              <div class="record-title"><h3>${esc(craft.recipe_name)}</h3><strong class="${Number(craft.realized_profit) >= 0 ? "positive" : "negative"}">${Number(craft.realized_profit) >= 0 ? "+" : ""}${money(craft.realized_profit)}</strong></div>
+              <p>판매까지 ${Number(craft.time_to_sell_hours || 0).toFixed(1)}시간 · 원본 예상 ${craft.raw_expected_profit_snapshot >= 0 ? "+" : ""}${money(craft.raw_expected_profit_snapshot)}</p>
+            </div>`).join("") || '<p class="muted">완료된 학습 기록이 없습니다.</p>'}</div>
+        </div>
+      </div>`;
+
+    panel.querySelectorAll("[data-learning-sale]").forEach((button) => {
+      const craft = open.find((item) => Number(item.id) === Number(button.dataset.learningSale));
+      if (craft) button.onclick = () => completeLearningSale(craft);
+    });
+  } catch (error) {
+    panel.innerHTML = `<div class="empty-state">학습 기록을 불러오지 못했습니다: ${esc(error.message)}</div>`;
+  }
+}
+
+const legacyLoadRecords = loadRecords;
+loadRecords = async function loadRecordsWithLearning() {
+  await legacyLoadRecords();
+  await loadLearningRecords();
+};
