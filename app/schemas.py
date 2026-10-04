@@ -45,6 +45,8 @@ class MeisterCraftCreate(BaseModel):
     recipe_key: str = Field(min_length=1, max_length=255)
     quantity: float = Field(gt=0, le=100000)
     fee_rate: AuctionFeeRate = 0.05
+    guild_discount: bool = True
+    guild_discount_rate: float = Field(default=0.04, ge=0, le=1)
     rank_position: int | None = Field(default=None, ge=1, le=100000)
     note: str | None = Field(default=None, max_length=1000)
 
