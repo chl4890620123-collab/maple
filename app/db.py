@@ -358,6 +358,9 @@ def init_db() -> None:
         migrate_legacy_text(conn)
         seed_if_empty(conn)
 
+    from . import meister_history
+    meister_history.init_tables()
+
 
 def seed_if_empty(conn) -> None:
     count = conn.execute("SELECT COUNT(*) FROM materials").fetchone()[0]
