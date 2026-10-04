@@ -39,3 +39,17 @@ class SaleCreate(BaseModel):
     unit_sale_price: float = Field(ge=0)
     fee_rate: AuctionFeeRate = 0.05
     note: str | None = None
+
+
+class MeisterCraftCreate(BaseModel):
+    recipe_key: str = Field(min_length=1, max_length=255)
+    quantity: float = Field(gt=0, le=100000)
+    fee_rate: AuctionFeeRate = 0.05
+    rank_position: int | None = Field(default=None, ge=1, le=100000)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class MeisterSaleCreate(BaseModel):
+    gross_sale_amount: float = Field(ge=0)
+    fee_rate: AuctionFeeRate = 0.05
+    note: str | None = Field(default=None, max_length=1000)
