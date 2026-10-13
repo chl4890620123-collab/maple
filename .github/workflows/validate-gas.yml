@@ -1,0 +1,29 @@
+name: Validate Maple GAS bridge
+
+on:
+  push:
+    paths:
+      - "integrations/google-apps-script/**"
+      - "tests/test_gas_bridge.cjs"
+      - ".github/workflows/validate-gas.yml"
+  pull_request:
+    paths:
+      - "integrations/google-apps-script/**"
+      - "tests/test_gas_bridge.cjs"
+      - ".github/workflows/validate-gas.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Apps Script syntax
+        run: node --check < integrations/google-apps-script/Code.gs
+      - name: Run mocked integration regression
+        run: node tests/test_gas_bridge.cjs
