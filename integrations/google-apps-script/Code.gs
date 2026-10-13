@@ -17,7 +17,8 @@ function onOpen() {
 
 function setupMaplePriceSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(MAPLE_SHEET) || ss.insertSheet(MAPLE_SHEET);
+  const oldSheet = ss.getSheetByName(MAPLE_SHEET);
+  const sheet = oldSheet || ss.insertSheet(MAPLE_SHEET);
   const header = sheet.getRange(1, 1, 1, MAPLE_COLUMNS.length);
   const existing = header.getValues()[0];
   if (existing.some(value => String(value).trim() !== '') &&
@@ -26,7 +27,9 @@ function setupMaplePriceSheet() {
   }
   header.setValues([MAPLE_COLUMNS]).setFontWeight('bold');
   sheet.setFrozenRows(1);
-  sheet.getRange('C2:C').insertCheckboxes();
+  // Only insert checkboxes in a newly created sheet: rerunning setup must not
+  // reset existing checkmarks or user-entered data.
+  if (!oldSheet) sheet.getRange('C2:C1000').insertCheckboxes();
   return sheet.getName();
 }
 
