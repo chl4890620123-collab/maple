@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import sqlite3
 
 from . import game_rules
 from .db import connection, now_iso
@@ -21,8 +22,22 @@ def _market_price_snapshot():
             for row in rows
             if row["source"] != "catalog_unpriced"
         }
-    except Exception:
-        return {}
+    except Exception as exc:
+        # Only an older database without the optional unified table may fall back
+        # to legacy prices. Other failures must not produce plausible but wrong
+        # profit calculations from stale price columns.
+        missing_sqlite_table = (
+            isinstance(exc, sqlite3.OperationalError)
+            and "no such table: market_prices" in str(exc).lower()
+        )
+        missing_mariadb_table = (
+            bool(getattr(exc, "args", ()))
+            and exc.args[0] == 1146
+            and "market_prices" in str(exc)
+        )
+        if missing_sqlite_table or missing_mariadb_table:
+            return {}
+        raise
 
 
 def _sync_market_price(item_name: str, price: int, source: str) -> None:
