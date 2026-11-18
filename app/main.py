@@ -1,3 +1,4 @@
+import hmac
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -19,7 +20,10 @@ def startup():
     init_db(); meister.init_market_prices()
 
 def require_admin(x_admin_token: str | None = Header(default=None)):
-    if ADMIN_TOKEN and x_admin_token != ADMIN_TOKEN: raise HTTPException(status_code=401, detail="관리자 토큰이 필요합니다.")
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="관리자 토큰이 설정되지 않아 쓰기 기능을 사용할 수 없습니다.")
+    if not hmac.compare_digest(x_admin_token or "", ADMIN_TOKEN):
+        raise HTTPException(status_code=401, detail="관리자 토큰이 필요합니다.")
 
 def recipe_metadata_index():
     index={}
